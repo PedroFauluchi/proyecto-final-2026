@@ -24,8 +24,5 @@ padeciendo de las físicas de la pelota y diversos obstáculos que dificultan pr
 Además de un sistema de monedas con el cual es posible adquirir skins y artefactos que mejoren las cualidades de los jugadores,
 acompañado del fin estético personalizable.*
 
-## Warnings
-- En este momento el proyecto se encuentra en su estado inicial, la única estructura que tiene son las clases necesarias (base).
-
 ## Wiki
 - [Propuesta completa aquí](https://github.com/PedroFauluchi/proyecto-final-2026/wiki/PassLikeRoman)
