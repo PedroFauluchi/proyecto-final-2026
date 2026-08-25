@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Pass Like Roman
 
 A [libGDX](https://libgdx.com/) project generated with [gdx-liftoff](https://github.com/libgdx/gdx-liftoff).
@@ -34,3 +35,17 @@ Useful Gradle tasks and flags:
 
 Note that most tasks that are not specific to a single project can be run with `name:` prefix, where the `name` should be replaced with the ID of a specific project.
 For example, `core:clean` removes `build` folder only from the `core` project.
+=======
+# proyecto-final-2026
+
+Un juego de fútbol que tiene como objetivo pasarle la pelota a un compañero,
+padeciendo de las físicas de la pelota y diversos obstáculos que dificultan progresivamente los pases.
+Además de un sistema de monedas con el cual es posible adquirir skins y artefactos que mejoren las cualidades de los jugadores,
+acompañado del fin estético personalizable.
+
+El videojuego está desarrollado en Java, utilizando LibGDX como framework. El proyecto está pensado para un juego Web.
+
+(- Instr compile & execute)
+
+En este momento el proyecto se encuentra en su estado inicial, la única estructura que tiene son las clases necesarias (base).
+>>>>>>> 197fa5c111f27d1f101b0bc880ad1eaa2b54a3a8
