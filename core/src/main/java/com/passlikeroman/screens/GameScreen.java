@@ -96,6 +96,14 @@ public class GameScreen extends ScreenAdapter {
 
     private float lightningTimer = 0f;
 
+    // ============================================================
+    // AMBIENTE — reloj propio para animar cosas de fondo
+    // (público, banderas, lluvia) que no dependen del estado
+    // del juego y nunca se pausan ni se reinician.
+    // ============================================================
+
+    private float ambientTime = 0f;
+
     // Viento: positivo empuja la pelota a la derecha,
     // negativo la empuja a la izquierda.
     private float wind = 0f;
@@ -348,6 +356,10 @@ public class GameScreen extends ScreenAdapter {
     // ============================================================
 
     private void update(float delta) {
+
+        // El ambiente (público, banderas, lluvia) sigue animado
+        // siempre, incluso en pantalla de Game Over.
+        ambientTime += delta;
 
         if (gameOver) return;
 
@@ -664,9 +676,12 @@ public class GameScreen extends ScreenAdapter {
         shapes.setColor(0.13f, 0.16f, 0.22f, 1);
         shapes.rect(0, 70, 900, 230);
 
-        shapes.setColor(1f, 0.92f, 0.62f, 0.95f);
-        shapes.rect(55, 340, 125, 25);
-        shapes.rect(720, 340, 125, 25);
+        // Base de las dos tribunas (antes eran dos rectángulos
+        // vacíos color crema; ahora son la base sobre la que
+        // se dibuja el público).
+        shapes.setColor(0.20f, 0.20f, 0.24f, 1);
+        shapes.rect(55, 335, 125, 30);
+        shapes.rect(720, 335, 125, 30);
 
         shapes.setColor(0.05f, 0.32f, 0.12f, 1);
         shapes.rect(0, 70, 900, 150);
@@ -684,21 +699,146 @@ public class GameScreen extends ScreenAdapter {
 
         shapes.end();
 
-        // Lluvia visual: dibujamos siempre que el clima sea RAIN.
+        // Público en las dos tribunas, con leve movimiento propio.
+        drawCrowd(55, 340, 125, 4);
+        drawCrowd(720, 340, 125, 4);
+
+        // Banderas flameando arriba de cada tribuna.
+        drawFlag(60, 365, 60, 70, 34, 0.10f, 0.35f, 0.85f, 0f);
+        drawFlag(780, 365, 60, 70, 34, 0.85f, 0.15f, 0.15f, 2.4f);
+
+        // Lluvia visual: cae de verdad con el tiempo, no un
+        // patrón fijo que solo cambia al empezar la ronda.
         if (currentWeather == WeatherEffect.RAIN) {
 
             shapes.begin(ShapeRenderer.ShapeType.Line);
             shapes.setColor(0.55f, 0.72f, 0.9f, 0.5f);
 
+            float fallSpeed = 480f;   // píxeles por segundo
+            float rangeY = 480f;      // alto de la zona donde cae
+            float slant = 6f;         // inclinación (viento leve)
+
             for (int i = 0; i < 130; i++) {
-                float x = (i * 83 + round * 17) % 900;
-                float y = 70 + (i * 47) % 430;
+
+                float seedX = (i * 83) % 900;
+                float seedOffset = (i * 197) % (int) rangeY;
+
+                // Cada gota tiene su propio punto de partida en el
+                // ciclo, así no caen todas "en fila" al mismo tiempo.
+                float fallen = (ambientTime * fallSpeed + seedOffset) % rangeY;
+
+                float y = 500f - fallen;
+                float x = (seedX - fallen * (slant / rangeY) * 40f + 900f) % 900f;
 
                 shapes.line(x, y, x - 8, y - 24);
             }
 
             shapes.end();
         }
+    }
+
+    // ============================================================
+    // PÚBLICO — cabecitas de color en las tribunas, cada una
+    // con su propia fase para que el movimiento no se vea
+    // sincronizado ni repetitivo.
+    // ============================================================
+
+    private void drawCrowd(float standX, float standY, float standWidth, int rows) {
+
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+
+        int cols = 10;
+        float spacingX = standWidth / cols;
+        float spacingY = 8f;
+
+        for (int row = 0; row < rows; row++) {
+            for (int col = 0; col < cols; col++) {
+
+                float seed = row * 37 + col * 13;
+
+                // Fase individual: hace que cada persona se mueva
+                // un poco desfasada de la de al lado.
+                float phase = (seed % 10) * 0.6f;
+
+                float bob = MathUtils.sin(ambientTime * 2.4f + phase) * 2.2f;
+
+                float px = standX + col * spacingX + spacingX / 2f;
+                float py = standY + row * spacingY + bob;
+
+                // Colores variados de campera/gorro para que se
+                // note que es gente y no una grilla repetida.
+                float colorPick = (seed % 5) / 5f;
+
+                shapes.setColor(
+                    0.5f + colorPick * 0.4f,
+                    0.3f + (1f - colorPick) * 0.3f,
+                    0.25f + colorPick * 0.5f,
+                    1
+                );
+
+                shapes.circle(px, py, 3.4f);
+            }
+        }
+
+        shapes.end();
+    }
+
+    // ============================================================
+    // BANDERA — un mástil fijo y una tela que ondea con seno,
+    // más fuerte cuanto más lejos está del mástil (así se ve
+    // como si flameara con el viento de verdad).
+    // ============================================================
+
+    private void drawFlag(
+        float poleX, float poleBaseY, float poleHeight,
+        float flagWidth, float flagHeight,
+        float r, float g, float b, float phase
+    ) {
+
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+
+        // Mástil.
+        shapes.setColor(0.28f, 0.28f, 0.30f, 1);
+        shapes.rect(poleX - 2, poleBaseY, 4, poleHeight);
+
+        float flagBaseX = poleX + 2;
+        float flagBaseY = poleBaseY + poleHeight - flagHeight;
+
+        int strips = 12;
+        float stripWidth = flagWidth / strips;
+
+        shapes.setColor(r, g, b, 1);
+
+        for (int i = 0; i < strips; i++) {
+
+            float t = i / (float) strips;
+
+            float wave = MathUtils.sin(ambientTime * 3.2f + phase + t * 5f)
+                * (3f + t * 9f);
+
+            shapes.rect(
+                flagBaseX + i * stripWidth,
+                flagBaseY + wave,
+                stripWidth + 1,
+                flagHeight
+            );
+        }
+
+        shapes.end();
+
+        // Texto de la bandera. Lo dejamos quieto (no ondea letra
+        // por letra, ShapeRenderer no da para eso) pero acompaña
+        // el movimiento general de la tela con un leve balanceo.
+        float textWave = MathUtils.sin(ambientTime * 3.2f + phase) * 3f;
+
+        batch.begin();
+        font.getData().setScale(0.32f);
+        font.setColor(1, 1, 1, 1);
+        font.draw(
+            batch, "PASSLIKEROMAN",
+            flagBaseX - 4, flagBaseY + flagHeight * 0.6f + textWave
+        );
+        batch.end();
     }
 
     private void drawPlatforms() {
@@ -749,8 +889,18 @@ public class GameScreen extends ScreenAdapter {
 
             Player p = players[i];
 
+            // Pequeño balanceo de "está de pie, respirando", solo
+            // cuando no hay nada más importante pasando (si no,
+            // se pisaría con la animación de patada/recepción
+            // que ya tenés armada en Player).
+            float idleBob = (!ball.flying && !scrolling && !gameOver)
+                ? MathUtils.sin(ambientTime * 2.6f + i * 3.1f) * 1.4f
+                : 0f;
+
+            float drawY = p.y + idleBob;
+
             shapes.setColor(0.82f, 0.61f, 0.45f, 1);
-            shapes.circle(p.x, p.y + 42, 11);
+            shapes.circle(p.x, drawY + 42, 11);
 
             shapes.setColor(
                 i == SENDER ? 0.05f : 0.04f,
@@ -759,18 +909,18 @@ public class GameScreen extends ScreenAdapter {
                 1
             );
 
-            shapes.rect(p.x - 18, p.y + 5, 36, 35);
+            shapes.rect(p.x - 18, drawY + 5, 36, 35);
 
             shapes.setColor(0.9f, 0.75f, 0.08f, 1);
-            shapes.rect(p.x - 18, p.y + 18, 36, 7);
+            shapes.rect(p.x - 18, drawY + 18, 36, 7);
 
             shapes.setColor(0.92f, 0.92f, 0.92f, 1);
-            shapes.rect(p.x - 13, p.y - 15, 10, 22);
-            shapes.rect(p.x + 3, p.y - 15, 10, 22);
+            shapes.rect(p.x - 13, drawY - 15, 10, 22);
+            shapes.rect(p.x + 3, drawY - 15, 10, 22);
 
             shapes.setColor(0.04f, 0.04f, 0.04f, 1);
-            shapes.rect(p.x - 16, p.y - 20, 14, 6);
-            shapes.rect(p.x + 4, p.y - 20, 14, 6);
+            shapes.rect(p.x - 16, drawY - 20, 14, 6);
+            shapes.rect(p.x + 4, drawY - 20, 14, 6);
         }
 
         shapes.end();
@@ -826,6 +976,27 @@ public class GameScreen extends ScreenAdapter {
         shapes.begin(ShapeRenderer.ShapeType.Line);
         shapes.setColor(0.05f, 0.05f, 0.05f, 1);
         shapes.circle(ball.position.x, ball.position.y, 9);
+
+        // Costuras que giran mientras la pelota vuela, para dar
+        // sensación de rotación en el aire (no afecta la física,
+        // es solo dibujo).
+        if (ball.flying) {
+
+            float angle = ambientTime * 640f; // grados por segundo
+
+            for (int i = 0; i < 2; i++) {
+
+                float a = angle + i * 90f;
+
+                float x1 = ball.position.x + MathUtils.cosDeg(a) * 7f;
+                float y1 = ball.position.y + MathUtils.sinDeg(a) * 7f;
+                float x2 = ball.position.x + MathUtils.cosDeg(a + 180f) * 7f;
+                float y2 = ball.position.y + MathUtils.sinDeg(a + 180f) * 7f;
+
+                shapes.line(x1, y1, x2, y2);
+            }
+        }
+
         shapes.end();
     }
 
