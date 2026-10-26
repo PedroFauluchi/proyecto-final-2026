@@ -20,7 +20,7 @@ public class Platform {
     }
 
     public float getPlayerY() {
-        return y + height + 18f;
+        return y + height + 12f;
     }
 
     public void move(float dx) {

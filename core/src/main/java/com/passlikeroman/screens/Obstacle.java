@@ -18,12 +18,14 @@ public class Obstacle {
     public float height;
     public float speed;
     public float phase;
+    private final float originY;
     public boolean active = true;
 
     public Obstacle(Type type, float x, float y) {
         this.type = type;
         this.x = x;
         this.y = y;
+        this.originY = y;
 
         switch (type) {
             case GOALKEEPER:
@@ -67,10 +69,9 @@ public class Obstacle {
     }
 
     public void update(float delta) {
+        phase += delta * (1.5f + speed * 0.01f);
         if (type == Type.INTERCEPTOR) {
-            phase += delta * 2.2f;
-            y += (float) Math.sin(phase) * speed * delta;
-            y = Math.max(150, Math.min(360, y));
+            y = Math.max(150, Math.min(360, originY + (float) Math.sin(phase) * Math.min(46f, speed * 0.38f)));
         }
     }
 }

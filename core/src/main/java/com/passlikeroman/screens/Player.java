@@ -23,10 +23,10 @@ public class Player {
     }
 
     // Cuánto dura la animación de patada al pasar.
-    private static final float KICK_DURATION = 0.22f;
+    private static final float KICK_DURATION = 0.38f;
 
     // Cuánto dura la animación al recibir.
-    private static final float RECEIVE_DURATION = 0.28f;
+    private static final float RECEIVE_DURATION = 0.46f;
 
     private float kickTimer = 0f;
     private float receiveTimer = 0f;

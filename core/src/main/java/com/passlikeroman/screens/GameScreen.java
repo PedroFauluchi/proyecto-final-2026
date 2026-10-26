@@ -6,12 +6,14 @@ import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.passlikeroman.PassLikeRoman;
+import com.passlikeroman.data.GameProfile;
 
 public class GameScreen extends ScreenAdapter {
 
@@ -21,6 +23,33 @@ public class GameScreen extends ScreenAdapter {
 
     private static final float WORLD_WIDTH = 900f;
     private static final float WORLD_HEIGHT = 520f;
+    private static final String[] STADIUM_BACKGROUND_FILES = {
+        "stadiums/bombonera.png",
+        "stadiums/monumental.png",
+        "stadiums/cilindro.png",
+        "stadiums/libertadores.png",
+        "stadiums/nuevo-gasometro.png"
+    };
+    private static final String[] PLAYER_SPRITE_FILES = {
+        "players/boca.png",
+        "players/river.png",
+        "players/racing.png",
+        "players/independiente.png",
+        "players/san-lorenzo.png",
+        "players/rosario-central.png",
+        "players/estudiantes.png",
+        "players/newells.png",
+        "players/argentinos-juniors.png",
+        "players/velez.png",
+        "players/huracan.png",
+        "players/gimnasia.png",
+        "players/neutro.png"
+    };
+    // Hoja adjunta: cada uniforme tiene una pose a mitad de la patada y otra de remate.
+    // -1 mantiene el sprite normal para kits que no aparecen en esa hoja.
+    private static final int[] KICK_SPRITE_BY_KIT = {4, -1, 8, 9, 7, 4, 6, 3, 1, 2, 0, 5, 10};
+    private static final int BOCA_KIT = 0;
+    private static final int RIVER_KIT = 1;
 
     // ============================================================
     // SLOTS FIJOS DE PANTALLA
@@ -50,6 +79,12 @@ public class GameScreen extends ScreenAdapter {
     private final ShapeRenderer shapes;
     private final SpriteBatch batch;
     private final BitmapFont font;
+    private final Texture fogTexture;
+    private final Texture stadiumBackground;
+    private final Texture[] playerSprites = new Texture[PLAYER_SPRITE_FILES.length];
+    private final Texture[][] kickSprites = new Texture[2][11];
+    private final Texture[][] bocaRiverKickSprites = new Texture[2][2];
+    private final Texture[][] receptionSprites = new Texture[2][PLAYER_SPRITE_FILES.length];
 
     // ============================================================
     // JUGADORES Y PLATAFORMAS — SIEMPRE 2, NUNCA 3
@@ -69,12 +104,13 @@ public class GameScreen extends ScreenAdapter {
     // ============================================================
 
     private int score = 0;
-    private int coins = 0;
+    private float animationTime = 0f;
     private int round = 1;
 
     private boolean dragging = false;
     private boolean gameOver = false;
     private boolean scrolling = false;
+    private boolean scrollAfterReceive = false;
 
     // ============================================================
     // SCROLL
@@ -96,14 +132,6 @@ public class GameScreen extends ScreenAdapter {
 
     private float lightningTimer = 0f;
 
-    // ============================================================
-    // AMBIENTE — reloj propio para animar cosas de fondo
-    // (público, banderas, lluvia) que no dependen del estado
-    // del juego y nunca se pausan ni se reinician.
-    // ============================================================
-
-    private float ambientTime = 0f;
-
     // Viento: positivo empuja la pelota a la derecha,
     // negativo la empuja a la izquierda.
     private float wind = 0f;
@@ -117,12 +145,30 @@ public class GameScreen extends ScreenAdapter {
     private float rainFlightTime = 0f;
 
     // ============================================================
+    // COLISIONES
+    // ============================================================
+
+    private static final float BALL_RADIUS = 9f;
+
+    // Ventana breve después de patear durante la cual la pelota
+    // no choca contra la plataforma del propio pasador (si no,
+    // chocaría contra su propia base apenas sale del pie, porque
+    // nace prácticamente pegada a ella).
+    private static final float LIFTOFF_GRACE = 0.15f;
+    private float liftoffTimer = 0f;
+
+    // ============================================================
     // INPUT
     // ============================================================
 
     private final Vector2 mouse = new Vector2();
     private final Vector2 dragPoint = new Vector2();
     private final Vector2 launchVelocity = new Vector2();
+    private final Vector2 previousBallPosition = new Vector2();
+    private final Vector2 receptionBallStart = new Vector2();
+    private static final float RECEPTION_BALL_GRAVITY = 980f;
+    private float receptionBallDropTimer = 0f;
+    private float receptionBallDropDuration = 0f;
 
     // ============================================================
     // CONSTRUCTOR
@@ -136,11 +182,31 @@ public class GameScreen extends ScreenAdapter {
         shapes = new ShapeRenderer();
         batch = new SpriteBatch();
         font = new BitmapFont();
+        fogTexture = new Texture(Gdx.files.internal("sprites/weather/fog.png"));
+        int stadiumIndex = MathUtils.clamp(GameProfile.stadium(), 0, STADIUM_BACKGROUND_FILES.length - 1);
+        stadiumBackground = new Texture(Gdx.files.internal(STADIUM_BACKGROUND_FILES[stadiumIndex]));
+        for (int i = 0; i < PLAYER_SPRITE_FILES.length; i++) {
+            playerSprites[i] = new Texture(Gdx.files.internal(PLAYER_SPRITE_FILES[i]));
+        }
+        for (int i = 0; i < 10; i++) {
+            kickSprites[0][i] = new Texture(Gdx.files.internal("players/actions/kick-mid-" + i + ".png"));
+            kickSprites[1][i] = new Texture(Gdx.files.internal("players/actions/kick-finish-" + i + ".png"));
+        }
+        kickSprites[0][10] = new Texture(Gdx.files.internal("players/actions/neutral-kick-mid.png"));
+        kickSprites[1][10] = new Texture(Gdx.files.internal("players/actions/neutral-kick-finish.png"));
+        bocaRiverKickSprites[0][0] = new Texture(Gdx.files.internal("players/actions/boca-kick-mid.png"));
+        bocaRiverKickSprites[1][0] = new Texture(Gdx.files.internal("players/actions/boca-kick-finish.png"));
+        bocaRiverKickSprites[0][1] = new Texture(Gdx.files.internal("players/actions/river-kick-mid.png"));
+        bocaRiverKickSprites[1][1] = new Texture(Gdx.files.internal("players/actions/river-kick-finish.png"));
+        for (int i = 0; i < PLAYER_SPRITE_FILES.length; i++) {
+            receptionSprites[0][i] = new Texture(Gdx.files.internal("players/reception/foot-" + i + ".png"));
+            receptionSprites[1][i] = new Texture(Gdx.files.internal("players/reception/chest-" + i + ".png"));
+        }
 
         platforms[SENDER] = new Platform(SENDER_X, 180, 190, 24);
         platforms[RECEIVER] = new Platform(RECEIVER_X, 230, 190, 24);
 
-        players[SENDER] = new Player("JUGADOR", 10, 0, 0, 35, 92, 82, 90);
+        players[SENDER] = createPlayer(35, 92, 82, 90);
         players[RECEIVER] = createRandomPlayer();
 
         resetPositions();
@@ -158,6 +224,8 @@ public class GameScreen extends ScreenAdapter {
                     restart();
                     return true;
                 }
+
+                if (players[RECEIVER].isReceiving()) return true;
 
                 if (!ball.flying && mouse.dst(ball.position) < 42) {
                     dragging = true;
@@ -224,6 +292,7 @@ public class GameScreen extends ScreenAdapter {
         );
 
         rainFlightTime = 0f;
+        liftoffTimer = 0f;
 
         chooseRandomWeather();
         createObstacle();
@@ -244,7 +313,14 @@ public class GameScreen extends ScreenAdapter {
         int precision = MathUtils.random(75, 95);
         int efecto = MathUtils.random(70, 95);
 
-        return new Player("JUGADOR", 8, 0, 0, potencia, recepcion, precision, efecto);
+        return createPlayer(potencia, recepcion, precision, efecto);
+    }
+
+    private Player createPlayer(int potencia, int recepcion, int precision, int efecto) {
+        float bonus = GameProfile.kitBonus();
+        return new Player("JUGADOR", 8, 0, 0,
+            Math.min(100, potencia + bonus), Math.min(100, recepcion + bonus),
+            Math.min(100, precision + bonus), Math.min(100, efecto + bonus));
     }
 
     // ============================================================
@@ -254,7 +330,6 @@ public class GameScreen extends ScreenAdapter {
     private void restart() {
 
         score = 0;
-        coins = 0;
         round = 1;
 
         gameOver = false;
@@ -269,7 +344,7 @@ public class GameScreen extends ScreenAdapter {
         platforms[SENDER] = new Platform(SENDER_X, 180, 190, 24);
         platforms[RECEIVER] = new Platform(RECEIVER_X, 230, 190, 24);
 
-        players[SENDER] = new Player("JUGADOR", 10, 0, 0, 35, 92, 82, 90);
+        players[SENDER] = createPlayer(35, 92, 82, 90);
         players[RECEIVER] = createRandomPlayer();
 
         resetPositions();
@@ -302,7 +377,8 @@ public class GameScreen extends ScreenAdapter {
 
                 // Viento chico: empuja, no reemplaza la puntería.
                 // Positivo = derecha, negativo = izquierda.
-                wind = MathUtils.random(-24f, 24f);
+                float windLimit = Math.min(55f, 24f + round * 1.5f);
+                wind = MathUtils.random(-windLimit, windLimit);
 
                 // Evitamos que salga "viento" casi nulo,
                 // porque ahí no se notaría ni se podría avisar
@@ -344,9 +420,13 @@ public class GameScreen extends ScreenAdapter {
         float speed = (6.2f + power * 3.0f) * distance;
 
         launchVelocity.set(dx, dy).nor().scl(speed);
+        float inaccuracy = (100f - players[SENDER].precision) * 0.025f;
+        launchVelocity.rotate(MathUtils.random(-inaccuracy, inaccuracy));
         launchVelocity.y += players[SENDER].efecto * 1.15f;
+        players[SENDER].startKick();
 
         rainFlightTime = 0f;
+        liftoffTimer = LIFTOFF_GRACE;
 
         ball.launch(launchVelocity);
     }
@@ -357,9 +437,13 @@ public class GameScreen extends ScreenAdapter {
 
     private void update(float delta) {
 
-        // El ambiente (público, banderas, lluvia) sigue animado
-        // siempre, incluso en pantalla de Game Over.
-        ambientTime += delta;
+        animationTime += delta;
+        for (Player player : players) if (player != null) player.update(delta);
+        updateReceptionBallDrop(delta);
+        if (scrollAfterReceive && !players[RECEIVER].isReceiving()) {
+            scrollAfterReceive = false;
+            startScroll();
+        }
 
         if (gameOver) return;
 
@@ -376,11 +460,16 @@ public class GameScreen extends ScreenAdapter {
 
         lightningTimer += delta;
 
+        if (liftoffTimer > 0) {
+            liftoffTimer -= delta;
+        }
+
         if (ball.flying) {
 
             float currentWind =
                 currentWeather == WeatherEffect.WIND ? wind : 0;
 
+            previousBallPosition.set(ball.position);
             ball.update(delta, currentWind, players[SENDER].efecto * 1.8f);
 
             // ----------------------------------------------------
@@ -389,13 +478,12 @@ public class GameScreen extends ScreenAdapter {
 
             if (currentWeather == WeatherEffect.RAIN) {
 
-                float previousDrop =
-                    0.5f * RAIN_EXTRA_GRAVITY * rainFlightTime * rainFlightTime;
+                float rainGravity = RAIN_EXTRA_GRAVITY * (1f + Math.min(round, 8) * 0.06f);
+                float previousDrop = 0.5f * rainGravity * rainFlightTime * rainFlightTime;
 
                 rainFlightTime += delta;
 
-                float newDrop =
-                    0.5f * RAIN_EXTRA_GRAVITY * rainFlightTime * rainFlightTime;
+                float newDrop = 0.5f * rainGravity * rainFlightTime * rainFlightTime;
 
                 ball.position.y -= (newDrop - previousDrop);
             }
@@ -410,12 +498,16 @@ public class GameScreen extends ScreenAdapter {
             if (ball.flying && checkObstacle()) {
                 lose();
             }
+
+            if (ball.flying && checkPlatformCollision()) {
+                lose();
+            }
         }
     }
 
     private void updateStorm(float delta) {
 
-        stormMovement += stormDirection * 45f * delta;
+        stormMovement += stormDirection * Math.min(100f, 45f + round * 2.5f) * delta;
 
         if (stormMovement > 40) {
             stormMovement = 40;
@@ -464,11 +556,79 @@ public class GameScreen extends ScreenAdapter {
         float bottom = obstacle.y;
         float top = obstacle.y + obstacle.height;
 
-        return
-            ball.position.x > left &&
-                ball.position.x < right &&
-                ball.position.y > bottom &&
-                ball.position.y < top;
+        return sweptCircleIntersectsRect(
+            ball.position.x, ball.position.y, BALL_RADIUS,
+            previousBallPosition.x, previousBallPosition.y,
+            left, bottom, right, top
+        );
+    }
+
+    // ============================================================
+    // COLISIÓN CON PLATAFORMAS
+    //
+    // Las plataformas también son un obstáculo: si el pase sale
+    // corto o muy bajo y la pelota pega contra el cajón (no contra
+    // el jugador), se pierde. No se revisa durante el breve
+    // "liftoff" después de patear, porque la pelota nace casi
+    // pegada a la plataforma del pasador.
+    // ============================================================
+
+    private boolean checkPlatformCollision() {
+
+        if (liftoffTimer > 0) return false;
+
+        for (Platform p : platforms) {
+
+            // Plataformas fuera de pantalla (ya recicladas
+            // durante el scroll) no cuentan.
+            if (p.x < -200 || p.x > 1000) continue;
+
+            if (sweptCircleIntersectsRect(
+                ball.position.x, ball.position.y, BALL_RADIUS,
+                previousBallPosition.x, previousBallPosition.y,
+                p.x, p.y, p.x + p.width, p.y + p.height
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // ============================================================
+    // CÍRCULO vs RECTÁNGULO
+    //
+    // Chequeo real de colisión (no solo "¿el centro está adentro?"),
+    // así la pelota no puede atravesar una esquina o un borde fino
+    // sin que se detecte el golpe.
+    // ============================================================
+
+    private boolean circleIntersectsRect(
+        float cx, float cy, float radius,
+        float left, float bottom, float right, float top
+    ) {
+
+        float closestX = MathUtils.clamp(cx, left, right);
+        float closestY = MathUtils.clamp(cy, bottom, top);
+
+        float dx = cx - closestX;
+        float dy = cy - closestY;
+
+        return (dx * dx + dy * dy) < (radius * radius);
+    }
+
+    /** Samples the ball's movement segment so fast passes cannot skip thin hazards. */
+    private boolean sweptCircleIntersectsRect(float cx, float cy, float radius,
+                                               float fromX, float fromY,
+                                               float left, float bottom, float right, float top) {
+        float distance = Vector2.dst(fromX, fromY, cx, cy);
+        int steps = Math.max(1, MathUtils.ceil(distance / Math.max(2f, radius * 0.5f)));
+        for (int i = 0; i <= steps; i++) {
+            float t = i / (float) steps;
+            if (circleIntersectsRect(MathUtils.lerp(fromX, cx, t), MathUtils.lerp(fromY, cy, t),
+                radius, left, bottom, right, top)) return true;
+        }
+        return false;
     }
 
     // ============================================================
@@ -478,18 +638,44 @@ public class GameScreen extends ScreenAdapter {
     private void successfulPass() {
 
         ball.flying = false;
+        Player receiver = players[RECEIVER];
+        float spriteBottom = receiver.y - 18f;
+        float relativeHeight = (ball.position.y - spriteBottom) / 82f;
+        Player.ReceiveType receiveType = relativeHeight >= 0.50f
+            ? Player.ReceiveType.CHEST
+            : Player.ReceiveType.FOOT;
+        receiver.startReceive(receiveType);
+        receptionBallStart.set(ball.position);
+        float dropHeight = Math.max(0f, ball.position.y - receiver.getFootY());
+        receptionBallDropDuration = (float) Math.sqrt(2f * dropHeight / RECEPTION_BALL_GRAVITY);
+        receptionBallDropTimer = receptionBallDropDuration;
+        if (receptionBallDropTimer <= 0f) keepBallAtReceiver();
 
         score += 100;
-        coins += 15;
+        GameProfile.addCoins(15);
 
         if (obstacle != null && obstacle.active) {
-            coins += obstacle.reward();
+            GameProfile.addCoins(obstacle.reward());
         }
 
         round++;
 
         obstacle = null;
-        startScroll();
+        scrollAfterReceive = true;
+    }
+
+    private void updateReceptionBallDrop(float delta) {
+        if (receptionBallDropTimer <= 0f) return;
+
+        Player receiver = players[RECEIVER];
+        receptionBallDropTimer = Math.max(0f, receptionBallDropTimer - delta);
+        float elapsed = receptionBallDropDuration - receptionBallDropTimer;
+        float progress = receptionBallDropDuration <= 0f ? 1f : elapsed / receptionBallDropDuration;
+        ball.position.set(
+            MathUtils.lerp(receptionBallStart.x, receiver.x - 14f, progress),
+            Math.max(receiver.getFootY(), receptionBallStart.y - 0.5f * RECEPTION_BALL_GRAVITY * elapsed * elapsed)
+        );
+        if (receptionBallDropTimer == 0f) keepBallAtReceiver();
     }
 
     private void startScroll() {
@@ -524,10 +710,16 @@ public class GameScreen extends ScreenAdapter {
         platforms[RECEIVER].move(step);
 
         updatePlayerPositions();
+        keepBallAtReceiver();
 
         if (progress >= 1) {
             finishScroll();
         }
+    }
+
+    private void keepBallAtReceiver() {
+        Player receiver = players[RECEIVER];
+        ball.position.set(receiver.x - 14f, receiver.getFootY());
     }
 
     private void finishScroll() {
@@ -570,6 +762,7 @@ public class GameScreen extends ScreenAdapter {
 
         ball.reset(players[SENDER].getFootX(), players[SENDER].getFootY());
         rainFlightTime = 0f;
+        liftoffTimer = 0f;
 
         chooseRandomWeather();
         createObstacle();
@@ -616,6 +809,7 @@ public class GameScreen extends ScreenAdapter {
         }
 
         obstacle = new Obstacle(type, baseX, obstacleY);
+        obstacle.speed += Math.min(100f, round * 2.5f);
     }
 
     private void lose() {
@@ -667,69 +861,31 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private void drawStadium() {
+        int cropWidth = Math.min(stadiumBackground.getWidth(),
+            Math.round(stadiumBackground.getHeight() * WORLD_WIDTH / WORLD_HEIGHT));
+        int cropX = (stadiumBackground.getWidth() - cropWidth) / 2;
+        batch.begin();
+        batch.setColor(1f, 1f, 1f, 1f);
+        batch.draw(stadiumBackground, 0, 0, WORLD_WIDTH, WORLD_HEIGHT,
+            cropX, 0, cropWidth, stadiumBackground.getHeight(), false, false);
+        batch.end();
 
-        shapes.begin(ShapeRenderer.ShapeType.Filled);
-
-        shapes.setColor(0.035f, 0.09f, 0.16f, 1);
-        shapes.rect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
-
-        shapes.setColor(0.13f, 0.16f, 0.22f, 1);
-        shapes.rect(0, 70, 900, 230);
-
-        // Base de las dos tribunas (antes eran dos rectángulos
-        // vacíos color crema; ahora son la base sobre la que
-        // se dibuja el público).
-        shapes.setColor(0.20f, 0.20f, 0.24f, 1);
-        shapes.rect(55, 335, 125, 30);
-        shapes.rect(720, 335, 125, 30);
-
-        shapes.setColor(0.05f, 0.32f, 0.12f, 1);
-        shapes.rect(0, 70, 900, 150);
-
-        for (int x = 0; x < 900; x += 120) {
-            shapes.setColor(0.07f, 0.38f, 0.15f, 1);
-            shapes.rect(x, 70, 60, 150);
-        }
-
-        shapes.setColor(0.9f, 0.95f, 0.9f, 0.55f);
-        shapes.rect(0, 90, 900, 3);
-        shapes.rect(0, 217, 900, 3);
-        shapes.rect(450, 90, 3, 130);
-        shapes.circle(450, 155, 42);
-
-        shapes.end();
-
-        // Público en las dos tribunas, con leve movimiento propio.
-        drawCrowd(55, 340, 125, 4);
-        drawCrowd(720, 340, 125, 4);
-
-        // Banderas flameando arriba de cada tribuna.
-        drawFlag(60, 365, 60, 70, 34, 0.10f, 0.35f, 0.85f, 0f);
-        drawFlag(780, 365, 60, 70, 34, 0.85f, 0.15f, 0.15f, 2.4f);
-
-        // Lluvia visual: cae de verdad con el tiempo, no un
-        // patrón fijo que solo cambia al empezar la ronda.
+        // Lluvia visual: dibujamos siempre que el clima sea RAIN.
         if (currentWeather == WeatherEffect.RAIN) {
 
             shapes.begin(ShapeRenderer.ShapeType.Line);
             shapes.setColor(0.55f, 0.72f, 0.9f, 0.5f);
 
-            float fallSpeed = 480f;   // píxeles por segundo
-            float rangeY = 480f;      // alto de la zona donde cae
-            float slant = 6f;         // inclinación (viento leve)
+            float fallSpeed = 480f;
+            float rangeY = 480f;
+            float slant = 6f;
 
             for (int i = 0; i < 130; i++) {
-
                 float seedX = (i * 83) % 900;
                 float seedOffset = (i * 197) % (int) rangeY;
-
-                // Cada gota tiene su propio punto de partida en el
-                // ciclo, así no caen todas "en fila" al mismo tiempo.
-                float fallen = (ambientTime * fallSpeed + seedOffset) % rangeY;
-
+                float fallen = (animationTime * fallSpeed + seedOffset) % rangeY;
                 float y = 500f - fallen;
                 float x = (seedX - fallen * (slant / rangeY) * 40f + 900f) % 900f;
-
                 shapes.line(x, y, x - 8, y - 24);
             }
 
@@ -737,107 +893,41 @@ public class GameScreen extends ScreenAdapter {
         }
     }
 
-    // ============================================================
-    // PÚBLICO — cabecitas de color en las tribunas, cada una
-    // con su propia fase para que el movimiento no se vea
-    // sincronizado ni repetitivo.
-    // ============================================================
-
     private void drawCrowd(float standX, float standY, float standWidth, int rows) {
-
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-
         int cols = 10;
-        float spacingX = standWidth / cols;
-        float spacingY = 8f;
-
-        for (int row = 0; row < rows; row++) {
-            for (int col = 0; col < cols; col++) {
-
-                float seed = row * 37 + col * 13;
-
-                // Fase individual: hace que cada persona se mueva
-                // un poco desfasada de la de al lado.
-                float phase = (seed % 10) * 0.6f;
-
-                float bob = MathUtils.sin(ambientTime * 2.4f + phase) * 2.2f;
-
-                float px = standX + col * spacingX + spacingX / 2f;
-                float py = standY + row * spacingY + bob;
-
-                // Colores variados de campera/gorro para que se
-                // note que es gente y no una grilla repetida.
-                float colorPick = (seed % 5) / 5f;
-
-                shapes.setColor(
-                    0.5f + colorPick * 0.4f,
-                    0.3f + (1f - colorPick) * 0.3f,
-                    0.25f + colorPick * 0.5f,
-                    1
-                );
-
-                shapes.circle(px, py, 3.4f);
-            }
+        for (int row = 0; row < rows; row++) for (int col = 0; col < cols; col++) {
+            float seed = row * 37 + col * 13;
+            float bob = MathUtils.sin(animationTime * 2.4f + (seed % 10) * 0.6f) * 2.2f;
+            float pick = (seed % 5) / 5f;
+            shapes.setColor(0.5f + pick * 0.4f, 0.3f + (1f - pick) * 0.3f, 0.25f + pick * 0.5f, 1);
+            shapes.circle(standX + (col + 0.5f) * standWidth / cols,
+                standY + row * 8f + bob, 3.4f);
         }
-
         shapes.end();
     }
 
-    // ============================================================
-    // BANDERA — un mástil fijo y una tela que ondea con seno,
-    // más fuerte cuanto más lejos está del mástil (así se ve
-    // como si flameara con el viento de verdad).
-    // ============================================================
-
-    private void drawFlag(
-        float poleX, float poleBaseY, float poleHeight,
-        float flagWidth, float flagHeight,
-        float r, float g, float b, float phase
-    ) {
-
+    private void drawFlag(float poleX, float poleBaseY, float poleHeight,
+                          float flagWidth, float flagHeight, float r, float g, float b, float phase) {
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-
-        // Mástil.
         shapes.setColor(0.28f, 0.28f, 0.30f, 1);
         shapes.rect(poleX - 2, poleBaseY, 4, poleHeight);
-
-        float flagBaseX = poleX + 2;
-        float flagBaseY = poleBaseY + poleHeight - flagHeight;
-
+        float flagX = poleX + 2;
+        float flagY = poleBaseY + poleHeight - flagHeight;
         int strips = 12;
         float stripWidth = flagWidth / strips;
-
         shapes.setColor(r, g, b, 1);
-
         for (int i = 0; i < strips; i++) {
-
             float t = i / (float) strips;
-
-            float wave = MathUtils.sin(ambientTime * 3.2f + phase + t * 5f)
-                * (3f + t * 9f);
-
-            shapes.rect(
-                flagBaseX + i * stripWidth,
-                flagBaseY + wave,
-                stripWidth + 1,
-                flagHeight
-            );
+            float wave = MathUtils.sin(animationTime * 3.2f + phase + t * 5f) * (3f + t * 9f);
+            shapes.rect(flagX + i * stripWidth, flagY + wave, stripWidth + 1, flagHeight);
         }
-
         shapes.end();
-
-        // Texto de la bandera. Lo dejamos quieto (no ondea letra
-        // por letra, ShapeRenderer no da para eso) pero acompaña
-        // el movimiento general de la tela con un leve balanceo.
-        float textWave = MathUtils.sin(ambientTime * 3.2f + phase) * 3f;
-
         batch.begin();
         font.getData().setScale(0.32f);
         font.setColor(1, 1, 1, 1);
-        font.draw(
-            batch, "PASSLIKEROMAN",
-            flagBaseX - 4, flagBaseY + flagHeight * 0.6f + textWave
-        );
+        font.draw(batch, "PASSLIKEROMAN", flagX - 4,
+            flagY + flagHeight * 0.6f + MathUtils.sin(animationTime * 3.2f + phase) * 3f);
         batch.end();
     }
 
@@ -882,61 +972,73 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private void drawPlayers() {
-
-        shapes.begin(ShapeRenderer.ShapeType.Filled);
-
-        for (int i = 0; i < 2; i++) {
-
-            Player p = players[i];
-
-            // Pequeño balanceo de "está de pie, respirando", solo
-            // cuando no hay nada más importante pasando (si no,
-            // se pisaría con la animación de patada/recepción
-            // que ya tenés armada en Player).
-            float idleBob = (!ball.flying && !scrolling && !gameOver)
-                ? MathUtils.sin(ambientTime * 2.6f + i * 3.1f) * 1.4f
-                : 0f;
-
-            float drawY = p.y + idleBob;
-
-            shapes.setColor(0.82f, 0.61f, 0.45f, 1);
-            shapes.circle(p.x, drawY + 42, 11);
-
-            shapes.setColor(
-                i == SENDER ? 0.05f : 0.04f,
-                i == SENDER ? 0.20f : 0.12f,
-                i == SENDER ? 0.55f : 0.35f,
-                1
-            );
-
-            shapes.rect(p.x - 18, drawY + 5, 36, 35);
-
-            shapes.setColor(0.9f, 0.75f, 0.08f, 1);
-            shapes.rect(p.x - 18, drawY + 18, 36, 7);
-
-            shapes.setColor(0.92f, 0.92f, 0.92f, 1);
-            shapes.rect(p.x - 13, drawY - 15, 10, 22);
-            shapes.rect(p.x + 3, drawY - 15, 10, 22);
-
-            shapes.setColor(0.04f, 0.04f, 0.04f, 1);
-            shapes.rect(p.x - 16, drawY - 20, 14, 6);
-            shapes.rect(p.x + 4, drawY - 20, 14, 6);
-        }
-
-        shapes.end();
-
         if (!ball.flying && !scrolling && !gameOver) {
             drawReceptionArc(players[RECEIVER]);
         }
 
+        int kit = MathUtils.clamp(GameProfile.kit(), 0, playerSprites.length - 1);
+        float spriteWidth = 34f;
+        float spriteHeight = 82f;
+
         batch.begin();
+        batch.setColor(1f, 1f, 1f, 1f);
+        for (int i = 0; i < players.length; i++) {
+            Player player = players[i];
+            Texture sprite = playerSprites[kit];
+            float frameWidth = spriteWidth;
+            int actionSprite = KICK_SPRITE_BY_KIT[kit];
+            int specialKickKit = kit == BOCA_KIT ? 0 : kit == RIVER_KIT ? 1 : -1;
+            boolean showingReceptionPose = player.isReceiving();
+            if (showingReceptionPose) {
+                int receivePose = player.getReceiveType() == Player.ReceiveType.CHEST ? 1 : 0;
+                sprite = receptionSprites[receivePose][kit];
+                frameWidth = receivePose == 0 && (kit == 1 || kit == 12) ? 52f : 36f;
+            }
+            boolean showingKickPose = false;
+            if (!showingReceptionPose && player.isKicking() && (actionSprite >= 0 || specialKickKit >= 0)) {
+                float progress = player.getKickProgress();
+                if (progress >= 0.18f && progress < 0.56f) {
+                    sprite = specialKickKit >= 0 ? bocaRiverKickSprites[0][specialKickKit] : kickSprites[0][actionSprite];
+                    frameWidth = specialKickKit >= 0 ? 60f : actionSprite == 10 ? 70f : 47f;
+                    showingKickPose = true;
+                } else if (progress >= 0.56f && progress < 0.92f) {
+                    sprite = specialKickKit >= 0 ? bocaRiverKickSprites[1][specialKickKit] : kickSprites[1][actionSprite];
+                    frameWidth = specialKickKit >= 0 ? 60f : actionSprite == 10 ? 70f : 47f;
+                    showingKickPose = true;
+                }
+            }
+            float bob = !ball.flying && !scrolling
+                ? MathUtils.sin(animationTime * 4f + i) * 2f
+                : 0f;
+            boolean clubFacingReversed = kit == 6 || kit == 7 || kit == 10 || kit == 11;
+            boolean mirrored = (i == RECEIVER) ^ clubFacingReversed;
+            boolean receptionFrameNeedsFlip = false;
+            boolean flipX = showingReceptionPose
+                ? receptionFrameNeedsFlip
+                : mirrored ^ (showingKickPose && clubFacingReversed);
+            float facing = mirrored ? -1f : 1f;
+            float kickPulse = player.isKicking()
+                ? MathUtils.sin(player.getKickProgress() * MathUtils.PI)
+                : 0f;
+            float receivePulse = player.isReceiving()
+                ? MathUtils.sin(player.getReceiveProgress() * MathUtils.PI)
+                : 0f;
+            float drawWidth = frameWidth * (1f + receivePulse * 0.06f);
+            float drawHeight = spriteHeight * (1f - receivePulse * 0.09f);
+            float drawX = player.x + facing * (kickPulse * 8f + receivePulse * 3f) - drawWidth / 2f;
+            float drawY = player.y + bob - 18f;
+
+            batch.draw(sprite,
+                drawX, drawY,
+                drawWidth, drawHeight,
+                0, 0, sprite.getWidth(), sprite.getHeight(),
+                flipX, false);
+        }
 
         font.getData().setScale(0.65f);
         font.setColor(1, 1, 1, 1);
-
         font.draw(batch, "PASA", players[SENDER].x - 25, players[SENDER].y - 32);
         font.draw(batch, "RECIBE", players[RECEIVER].x - 28, players[RECEIVER].y - 32);
-
         batch.end();
     }
 
@@ -973,30 +1075,51 @@ public class GameScreen extends ScreenAdapter {
         shapes.circle(ball.position.x, ball.position.y, 9);
         shapes.end();
 
-        shapes.begin(ShapeRenderer.ShapeType.Line);
-        shapes.setColor(0.05f, 0.05f, 0.05f, 1);
-        shapes.circle(ball.position.x, ball.position.y, 9);
-
-        // Costuras que giran mientras la pelota vuela, para dar
-        // sensación de rotación en el aire (no afecta la física,
-        // es solo dibujo).
         if (ball.flying) {
-
-            float angle = ambientTime * 640f; // grados por segundo
-
+            shapes.begin(ShapeRenderer.ShapeType.Line);
+            shapes.setColor(0.05f, 0.05f, 0.05f, 1);
+            float angle = animationTime * 640f;
             for (int i = 0; i < 2; i++) {
-
                 float a = angle + i * 90f;
-
                 float x1 = ball.position.x + MathUtils.cosDeg(a) * 7f;
                 float y1 = ball.position.y + MathUtils.sinDeg(a) * 7f;
                 float x2 = ball.position.x + MathUtils.cosDeg(a + 180f) * 7f;
                 float y2 = ball.position.y + MathUtils.sinDeg(a + 180f) * 7f;
-
                 shapes.line(x1, y1, x2, y2);
             }
+            shapes.end();
         }
 
+        if (currentWeather == WeatherEffect.FOG) {
+            float drift = MathUtils.sin(animationTime * 0.22f) * 28f;
+            float drift2 = MathUtils.sin(animationTime * 0.17f + 2f) * 22f;
+
+            batch.begin();
+            batch.setColor(0.86f, 0.91f, 0.96f, 0.28f);
+            batch.draw(fogTexture, 300f + drift, 250f, 170f, 128f);
+            batch.draw(fogTexture, 374f + drift2, 285f, 175f, 132f);
+            batch.draw(fogTexture, 350f - drift2, 215f, 155f, 116f);
+            batch.setColor(1f, 1f, 1f, 1f);
+            batch.end();
+        } else if (currentWeather == WeatherEffect.STORM) {
+            shapes.begin(ShapeRenderer.ShapeType.Filled);
+            shapes.setColor(0.035f, 0.045f, 0.075f, 0.30f);
+            float drift = (animationTime * 25f) % 220f;
+            for (int i = 0; i < 5; i++) {
+                float x = i * 220f - drift;
+                shapes.ellipse(x, 300 + (i % 2) * 20, 190, 46);
+            }
+            float flash = Math.max(0f, 1f - (lightningTimer % 6f) * 5f);
+            if (flash > 0) {
+                shapes.setColor(0.75f, 0.84f, 1f, flash * 0.24f);
+                shapes.rect(0, 70, WORLD_WIDTH, WORLD_HEIGHT - 70);
+            }
+            shapes.end();
+        }
+
+        shapes.begin(ShapeRenderer.ShapeType.Line);
+        shapes.setColor(0.05f, 0.05f, 0.05f, 1);
+        shapes.circle(ball.position.x, ball.position.y, 9);
         shapes.end();
     }
 
@@ -1044,7 +1167,7 @@ public class GameScreen extends ScreenAdapter {
                 - 0.5f * 520f * t * t;
 
             if (currentWeather == WeatherEffect.RAIN) {
-                py -= 0.5f * RAIN_EXTRA_GRAVITY * t * t;
+                py -= 0.5f * RAIN_EXTRA_GRAVITY * (1f + Math.min(round, 8) * 0.06f) * t * t;
             }
 
             float distanceFromPlayer = Vector2.dst(
@@ -1146,7 +1269,7 @@ public class GameScreen extends ScreenAdapter {
 
         font.setColor(1, 0.78f, 0.15f, 1);
         font.draw(batch, "COINS", 28, 450);
-        font.draw(batch, String.valueOf(coins), 210, 450);
+        font.draw(batch, String.valueOf(GameProfile.coins()), 210, 450);
 
         font.setColor(1, 1, 1, 1);
         font.getData().setScale(0.65f);
@@ -1181,6 +1304,9 @@ public class GameScreen extends ScreenAdapter {
 
         font.getData().setScale(0.85f);
         font.draw(batch, weatherText, 320, 480);
+        font.getData().setScale(0.55f);
+        font.setColor(0.75f, 0.84f, 0.94f, 1);
+        font.draw(batch, GameProfile.STADIUMS[GameProfile.stadium()], 520, 435);
 
         batch.end();
     }
@@ -1202,7 +1328,7 @@ public class GameScreen extends ScreenAdapter {
         font.getData().setScale(1.0f);
         font.setColor(1, 1, 1, 1);
         font.draw(batch, "Puntaje: " + score, 365, 280);
-        font.draw(batch, "Monedas: " + coins, 365, 250);
+        font.draw(batch, "Monedas: " + GameProfile.coins(), 365, 250);
         font.draw(batch, "Clic o R para volver a jugar", 315, 205);
         font.draw(batch, "M para volver al menú", 350, 180);
 
@@ -1219,5 +1345,11 @@ public class GameScreen extends ScreenAdapter {
         shapes.dispose();
         batch.dispose();
         font.dispose();
+        fogTexture.dispose();
+        stadiumBackground.dispose();
+        for (Texture playerSprite : playerSprites) playerSprite.dispose();
+        for (Texture[] poses : kickSprites) for (Texture pose : poses) pose.dispose();
+        for (Texture[] poses : bocaRiverKickSprites) for (Texture pose : poses) pose.dispose();
+        for (Texture[] poses : receptionSprites) for (Texture pose : poses) pose.dispose();
     }
 }
