@@ -227,7 +227,8 @@ public class MenuScreen extends ScreenAdapter {
                 batch.draw(kitPreviews[i], x + 5, y - 10, 25, 40);
                 boolean owned = GameProfile.isKitOwned(i);
                 boolean selected = i == GameProfile.kit();
-                String state = selected ? "EQUIPADO" : owned ? "EQUIPAR" : GameProfile.COSTS[i] + " coins";
+                String state = "REC " + GameProfile.receptionLevel(i) + "  PASE " + GameProfile.passLevel(i)
+                    + "  |  " + (selected ? "EQUIPADO" : owned ? "EQUIPAR" : GameProfile.COSTS[i] + " coins");
                 font.draw(batch, GameProfile.CLUBS[i], x + 35, y + 20);
                 font.draw(batch, state, x + 35, y + 7);
             }

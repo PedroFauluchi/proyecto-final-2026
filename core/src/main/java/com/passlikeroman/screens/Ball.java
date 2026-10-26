@@ -6,7 +6,7 @@ public class Ball {
 
     public final Vector2 position = new Vector2();
     public final Vector2 velocity = new Vector2();
-    public final float radius = 6f;
+    public final float radius = 5f;
 
     public boolean flying = false;
 

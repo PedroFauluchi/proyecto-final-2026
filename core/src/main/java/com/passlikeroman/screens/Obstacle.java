@@ -29,29 +29,29 @@ public class Obstacle {
 
         switch (type) {
             case GOALKEEPER:
-                width = 32;
-                height = 60;
+                width = 27.2f;
+                height = 51;
                 break;
             case INTERCEPTOR:
-                width = 30;
-                height = 60;
+                width = 25.5f;
+                height = 51;
                 speed = 95;
                 break;
             case CONE_WALL:
-                width = 70;
-                height = 28;
+                width = 59.5f;
+                height = 23.8f;
                 break;
             case TIRES:
-                width = 62;
-                height = 42;
+                width = 52.7f;
+                height = 35.7f;
                 break;
             case WIND_GUST:
-                width = 50;
-                height = 90;
+                width = 42.5f;
+                height = 76.5f;
                 break;
             default:
-                width = 38;
-                height = 55;
+                width = 32.3f;
+                height = 46.75f;
                 break;
         }
     }

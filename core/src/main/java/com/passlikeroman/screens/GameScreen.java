@@ -81,6 +81,7 @@ public class GameScreen extends ScreenAdapter {
     private final BitmapFont font;
     private final Texture fogTexture;
     private final Texture stadiumBackground;
+    private final Texture platformTexture;
     private final Texture[] playerSprites = new Texture[PLAYER_SPRITE_FILES.length];
     private final Texture[][] kickSprites = new Texture[2][11];
     private final Texture[][] bocaRiverKickSprites = new Texture[2][2];
@@ -103,7 +104,6 @@ public class GameScreen extends ScreenAdapter {
     // ESTADO
     // ============================================================
 
-    private int score = 0;
     private float animationTime = 0f;
     private int round = 1;
 
@@ -148,7 +148,7 @@ public class GameScreen extends ScreenAdapter {
     // COLISIONES
     // ============================================================
 
-    private static final float BALL_RADIUS = 9f;
+    private static final float BALL_RADIUS = 7.2f;
 
     // Ventana breve después de patear durante la cual la pelota
     // no choca contra la plataforma del propio pasador (si no,
@@ -185,6 +185,7 @@ public class GameScreen extends ScreenAdapter {
         fogTexture = new Texture(Gdx.files.internal("sprites/weather/fog.png"));
         int stadiumIndex = MathUtils.clamp(GameProfile.stadium(), 0, STADIUM_BACKGROUND_FILES.length - 1);
         stadiumBackground = new Texture(Gdx.files.internal(STADIUM_BACKGROUND_FILES[stadiumIndex]));
+        platformTexture = new Texture(Gdx.files.internal("sprites/platforms/game-platform.png"));
         for (int i = 0; i < PLAYER_SPRITE_FILES.length; i++) {
             playerSprites[i] = new Texture(Gdx.files.internal(PLAYER_SPRITE_FILES[i]));
         }
@@ -203,10 +204,10 @@ public class GameScreen extends ScreenAdapter {
             receptionSprites[1][i] = new Texture(Gdx.files.internal("players/reception/chest-" + i + ".png"));
         }
 
-        platforms[SENDER] = new Platform(SENDER_X, 180, 190, 24);
-        platforms[RECEIVER] = new Platform(RECEIVER_X, 230, 190, 24);
+        platforms[SENDER] = new Platform(SENDER_X, 180, 170, 20);
+        platforms[RECEIVER] = new Platform(RECEIVER_X, 230, 170, 20);
 
-        players[SENDER] = createPlayer(35, 92, 82, 90);
+        players[SENDER] = createPlayer(82, 35);
         players[RECEIVER] = createRandomPlayer();
 
         resetPositions();
@@ -308,19 +309,15 @@ public class GameScreen extends ScreenAdapter {
 
     private Player createRandomPlayer() {
 
-        int potencia = MathUtils.random(20, 45);
-        int recepcion = MathUtils.random(75, 95);
-        int precision = MathUtils.random(75, 95);
-        int efecto = MathUtils.random(70, 95);
+        int power = MathUtils.random(75, 95);
+        int curve = MathUtils.random(20, 45);
 
-        return createPlayer(potencia, recepcion, precision, efecto);
+        return createPlayer(power, curve);
     }
 
-    private Player createPlayer(int potencia, int recepcion, int precision, int efecto) {
-        float bonus = GameProfile.kitBonus();
+    private Player createPlayer(int power, int curve) {
         return new Player("JUGADOR", 8, 0, 0,
-            Math.min(100, potencia + bonus), Math.min(100, recepcion + bonus),
-            Math.min(100, precision + bonus), Math.min(100, efecto + bonus));
+            curve, GameProfile.passPrecision(), power, GameProfile.receptionRating());
     }
 
     // ============================================================
@@ -329,7 +326,6 @@ public class GameScreen extends ScreenAdapter {
 
     private void restart() {
 
-        score = 0;
         round = 1;
 
         gameOver = false;
@@ -341,10 +337,10 @@ public class GameScreen extends ScreenAdapter {
         stormMovement = 0;
         lightningTimer = 0;
 
-        platforms[SENDER] = new Platform(SENDER_X, 180, 190, 24);
-        platforms[RECEIVER] = new Platform(RECEIVER_X, 230, 190, 24);
+        platforms[SENDER] = new Platform(SENDER_X, 180, 170, 20);
+        platforms[RECEIVER] = new Platform(RECEIVER_X, 230, 170, 20);
 
-        players[SENDER] = createPlayer(35, 92, 82, 90);
+        players[SENDER] = createPlayer(82, 35);
         players[RECEIVER] = createRandomPlayer();
 
         resetPositions();
@@ -420,7 +416,7 @@ public class GameScreen extends ScreenAdapter {
         float speed = (6.2f + power * 3.0f) * distance;
 
         launchVelocity.set(dx, dy).nor().scl(speed);
-        float inaccuracy = (100f - players[SENDER].precision) * 0.025f;
+        float inaccuracy = (100f - players[SENDER].precision) * 0.15f;
         launchVelocity.rotate(MathUtils.random(-inaccuracy, inaccuracy));
         launchVelocity.y += players[SENDER].efecto * 1.15f;
         players[SENDER].startKick();
@@ -651,7 +647,6 @@ public class GameScreen extends ScreenAdapter {
         receptionBallDropTimer = receptionBallDropDuration;
         if (receptionBallDropTimer <= 0f) keepBallAtReceiver();
 
-        score += 100;
         GameProfile.addCoins(15);
 
         if (obstacle != null && obstacle.active) {
@@ -932,43 +927,19 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private void drawPlatforms() {
-
-        shapes.begin(ShapeRenderer.ShapeType.Filled);
-
+        float drawWidth = 170f;
+        float drawHeight = drawWidth * platformTexture.getHeight() / platformTexture.getWidth();
+        float grassTopOffset = drawHeight * 0.66f;
+        batch.begin();
+        batch.setColor(1f, 1f, 1f, 1f);
         for (int i = 0; i < platforms.length; i++) {
-
             Platform p = platforms[i];
-
             if (p.x < -200 || p.x > 1000) continue;
-
-            shapes.setColor(0.22f, 0.13f, 0.07f, 1);
-            shapes.triangle(
-                p.x + 20, p.y,
-                p.x + p.width - 20, p.y,
-                p.x + p.width / 2f, p.y - 65
-            );
-
-            shapes.setColor(
-                i == SENDER ? 0.08f : 0.12f,
-                i == SENDER ? 0.48f : 0.55f,
-                i == SENDER ? 0.16f : 0.20f,
-                1
-            );
-
-            shapes.rect(p.x, p.y, p.width, p.height);
-
-            shapes.setColor(0.8f, 0.9f, 0.75f, 0.9f);
-            shapes.rect(p.x + 10, p.y + p.height - 4, p.width - 20, 4);
-
-            shapes.setColor(0.3f, 0.2f, 0.12f, 1);
-            shapes.rect(p.x + 15, p.y + p.height, 6, 42);
-            shapes.rect(p.x + p.width - 21, p.y + p.height, 6, 42);
-
-            shapes.setColor(0.35f, 0.25f, 0.15f, 1);
-            shapes.rect(p.x + 20, p.y + p.height + 28, p.width - 40, 4);
+            float drawX = p.x + (p.width - drawWidth) / 2f;
+            float drawY = p.y + p.height - grassTopOffset;
+            batch.draw(platformTexture, drawX, drawY, drawWidth, drawHeight);
         }
-
-        shapes.end();
+        batch.end();
     }
 
     private void drawPlayers() {
@@ -977,8 +948,8 @@ public class GameScreen extends ScreenAdapter {
         }
 
         int kit = MathUtils.clamp(GameProfile.kit(), 0, playerSprites.length - 1);
-        float spriteWidth = 34f;
-        float spriteHeight = 82f;
+        float spriteWidth = 31f;
+        float spriteHeight = 74f;
 
         batch.begin();
         batch.setColor(1f, 1f, 1f, 1f);
@@ -1023,8 +994,8 @@ public class GameScreen extends ScreenAdapter {
             float receivePulse = player.isReceiving()
                 ? MathUtils.sin(player.getReceiveProgress() * MathUtils.PI)
                 : 0f;
-            float drawWidth = frameWidth * (1f + receivePulse * 0.06f);
-            float drawHeight = spriteHeight * (1f - receivePulse * 0.09f);
+            float drawWidth = frameWidth * 0.9f * (1f + receivePulse * 0.06f);
+            float drawHeight = spriteHeight * 0.9f * (1f - receivePulse * 0.09f);
             float drawX = player.x + facing * (kickPulse * 8f + receivePulse * 3f) - drawWidth / 2f;
             float drawY = player.y + bob - 18f;
 
@@ -1035,10 +1006,6 @@ public class GameScreen extends ScreenAdapter {
                 flipX, false);
         }
 
-        font.getData().setScale(0.65f);
-        font.setColor(1, 1, 1, 1);
-        font.draw(batch, "PASA", players[SENDER].x - 25, players[SENDER].y - 32);
-        font.draw(batch, "RECIBE", players[RECEIVER].x - 28, players[RECEIVER].y - 32);
         batch.end();
     }
 
@@ -1072,7 +1039,7 @@ public class GameScreen extends ScreenAdapter {
 
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         shapes.setColor(1, 1, 1, 1);
-        shapes.circle(ball.position.x, ball.position.y, 9);
+        shapes.circle(ball.position.x, ball.position.y, BALL_RADIUS);
         shapes.end();
 
         if (ball.flying) {
@@ -1119,7 +1086,7 @@ public class GameScreen extends ScreenAdapter {
 
         shapes.begin(ShapeRenderer.ShapeType.Line);
         shapes.setColor(0.05f, 0.05f, 0.05f, 1);
-        shapes.circle(ball.position.x, ball.position.y, 9);
+        shapes.circle(ball.position.x, ball.position.y, BALL_RADIUS);
         shapes.end();
     }
 
@@ -1194,25 +1161,25 @@ public class GameScreen extends ScreenAdapter {
 
             case GOALKEEPER:
                 shapes.setColor(0.95f, 0.75f, 0.08f, 1);
-                shapes.circle(obstacle.x, obstacle.y + 60, 10);
+                shapes.circle(obstacle.x, obstacle.y + 51, 8.5f);
                 shapes.setColor(0.85f, 0.1f, 0.12f, 1);
-                shapes.rect(obstacle.x - 16, obstacle.y + 20, 32, 38);
+                shapes.rect(obstacle.x - 13.6f, obstacle.y + 17, 27.2f, 32.3f);
                 break;
 
             case INTERCEPTOR:
                 shapes.setColor(0.82f, 0.61f, 0.45f, 1);
-                shapes.circle(obstacle.x, obstacle.y + 65, 10);
+                shapes.circle(obstacle.x, obstacle.y + 55.25f, 8.5f);
                 shapes.setColor(0.95f, 0.2f, 0.15f, 1);
-                shapes.rect(obstacle.x - 15, obstacle.y + 20, 30, 40);
+                shapes.rect(obstacle.x - 12.75f, obstacle.y + 17, 25.5f, 34);
                 break;
 
             case CONE_WALL:
                 shapes.setColor(1f, 0.48f, 0.05f, 1);
                 for (int i = 0; i < 4; i++) {
                     shapes.triangle(
-                        obstacle.x - 32 + i * 22, obstacle.y,
-                        obstacle.x - 22 + i * 22, obstacle.y,
-                        obstacle.x - 27 + i * 22, obstacle.y + 28
+                        obstacle.x - 27.2f + i * 18.7f, obstacle.y,
+                        obstacle.x - 18.7f + i * 18.7f, obstacle.y,
+                        obstacle.x - 22.95f + i * 18.7f, obstacle.y + 23.8f
                     );
                 }
                 break;
@@ -1220,18 +1187,18 @@ public class GameScreen extends ScreenAdapter {
             case TIRES:
                 shapes.setColor(0.04f, 0.04f, 0.04f, 1);
                 for (int i = 0; i < 3; i++) {
-                    shapes.circle(obstacle.x - 22 + i * 22, obstacle.y + 18, 18);
+                    shapes.circle(obstacle.x - 18.7f + i * 18.7f, obstacle.y + 15.3f, 15.3f);
                 }
                 break;
 
             case WIND_GUST:
                 shapes.setColor(0.4f, 0.8f, 1f, 0.35f);
-                shapes.rect(obstacle.x - 25, obstacle.y, 50, 90);
+                shapes.rect(obstacle.x - 21.25f, obstacle.y, 42.5f, 76.5f);
                 break;
 
             case CARDBOARD:
                 shapes.setColor(0.62f, 0.42f, 0.22f, 1);
-                shapes.rect(obstacle.x - 19, obstacle.y, 38, 55);
+                shapes.rect(obstacle.x - 16.15f, obstacle.y, 32.3f, 46.75f);
                 break;
         }
 
@@ -1253,62 +1220,36 @@ public class GameScreen extends ScreenAdapter {
     private void drawHud() {
 
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-
-        shapes.setColor(0.02f, 0.07f, 0.13f, 0.88f);
-        shapes.rect(15, 425, 245, 75);
-        shapes.rect(300, 450, 380, 48);
-
+        drawPixelCoinsPanel(18, 474, 150, 30);
         shapes.end();
 
         batch.begin();
-
-        font.getData().setScale(1.15f);
-        font.setColor(1, 1, 1, 1);
-        font.draw(batch, "SCORE", 28, 480);
-        font.draw(batch, String.valueOf(score), 210, 480);
-
-        font.setColor(1, 0.78f, 0.15f, 1);
-        font.draw(batch, "COINS", 28, 450);
-        font.draw(batch, String.valueOf(GameProfile.coins()), 210, 450);
-
-        font.setColor(1, 1, 1, 1);
-        font.getData().setScale(0.65f);
-        font.draw(batch, "RONDA " + round, 28, 430);
-
-        String weatherText;
-
-        switch (currentWeather) {
-
-            case FOG:
-                weatherText = "NIEBLA";
-                break;
-
-            case WIND:
-                weatherText = wind > 0
-                    ? "VIENTO -> DERECHA"
-                    : "VIENTO <- IZQUIERDA";
-                break;
-
-            case STORM:
-                weatherText = "TORMENTA";
-                break;
-
-            case RAIN:
-                weatherText = "LLUVIA";
-                break;
-
-            default:
-                weatherText = "CLIMA NORMAL";
-                break;
-        }
-
-        font.getData().setScale(0.85f);
-        font.draw(batch, weatherText, 320, 480);
-        font.getData().setScale(0.55f);
-        font.setColor(0.75f, 0.84f, 0.94f, 1);
-        font.draw(batch, GameProfile.STADIUMS[GameProfile.stadium()], 520, 435);
-
+        font.getData().setScale(0.62f);
+        font.setColor(1f, 1f, 1f, 1f);
+        font.draw(batch, "Coins: " + GameProfile.coins(), 28, 494);
         batch.end();
+    }
+
+    private void drawPixelCoinsPanel(float x, float y, float width, float height) {
+        shapes.setColor(0.035f, 0.045f, 0.075f, 0.98f);
+        shapes.rect(x, y, width, height);
+        shapes.setColor(0.63f, 0.69f, 0.76f, 1f);
+        shapes.rect(x + 2f, y + 2f, width - 4f, height - 4f);
+        shapes.setColor(0.20f, 0.25f, 0.34f, 1f);
+        shapes.rect(x + 5f, y + 5f, width - 10f, height - 10f);
+        shapes.setColor(0.075f, 0.19f, 0.39f, 1f);
+        shapes.rect(x + 8f, y + 8f, width - 16f, height - 16f);
+        shapes.setColor(0.12f, 0.29f, 0.55f, 1f);
+        shapes.rect(x + 11f, y + 11f, width - 22f, height - 22f);
+        shapes.setColor(0.25f, 0.43f, 0.69f, 0.9f);
+        shapes.rect(x + 13f, y + height - 15f, width - 26f, 2f);
+        shapes.setColor(0.035f, 0.10f, 0.23f, 1f);
+        shapes.rect(x + 13f, y + 12f, width - 26f, 2f);
+        shapes.setColor(0.82f, 0.85f, 0.88f, 1f);
+        shapes.rect(x + 4f, y + 4f, 3f, 3f);
+        shapes.rect(x + width - 7f, y + 4f, 3f, 3f);
+        shapes.rect(x + 4f, y + height - 7f, 3f, 3f);
+        shapes.rect(x + width - 7f, y + height - 7f, 3f, 3f);
     }
 
 
@@ -1327,8 +1268,7 @@ public class GameScreen extends ScreenAdapter {
 
         font.getData().setScale(1.0f);
         font.setColor(1, 1, 1, 1);
-        font.draw(batch, "Puntaje: " + score, 365, 280);
-        font.draw(batch, "Monedas: " + GameProfile.coins(), 365, 250);
+        font.draw(batch, "Coins: " + GameProfile.coins(), 365, 280);
         font.draw(batch, "Clic o R para volver a jugar", 315, 205);
         font.draw(batch, "M para volver al menú", 350, 180);
 
@@ -1347,6 +1287,7 @@ public class GameScreen extends ScreenAdapter {
         font.dispose();
         fogTexture.dispose();
         stadiumBackground.dispose();
+        platformTexture.dispose();
         for (Texture playerSprite : playerSprites) playerSprite.dispose();
         for (Texture[] poses : kickSprites) for (Texture pose : poses) pose.dispose();
         for (Texture[] poses : bocaRiverKickSprites) for (Texture pose : poses) pose.dispose();

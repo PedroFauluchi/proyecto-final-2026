@@ -11,6 +11,8 @@ public final class GameProfile {
         "ARGENTINOS JUNIORS", "VELEZ SARSFIELD", "HURACAN", "GIMNASIA", "NEUTRO"
     };
     public static final int[] COSTS = {0, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720, 780, 840};
+    private static final int[] RECEPTION_LEVELS = {11, 12, 9, 8, 10, 6, 8, 4, 3, 7, 5, 2, 1};
+    private static final int[] PASS_LEVELS = {12, 11, 9, 10, 7, 5, 8, 6, 4, 7, 2, 3, 1};
     public static final String[] STADIUMS = {"LA BOMBONERA", "EL MONUMENTAL", "CILINDRO", "LIBERTADORES", "NUEVO GASOMETRO"};
     public static final int[] STADIUM_COSTS = {0, 250, 320, 400, 480};
     private static final Preferences DATA = Gdx.app.getPreferences("pass-like-roman-profile");
@@ -28,7 +30,24 @@ public final class GameProfile {
     public static int unlockedStadiums() { return countOwned(OWNED_STADIUMS); }
     public static boolean isKitOwned(int index) { return index >= 0 && index < OWNED_KITS.length && OWNED_KITS[index]; }
     public static boolean isStadiumOwned(int index) { return index >= 0 && index < OWNED_STADIUMS.length && OWNED_STADIUMS[index]; }
-    public static int kitBonus() { return kit * 3; }
+    public static int receptionLevel() { return receptionLevel(kit); }
+    public static int receptionLevel(int kitIndex) {
+        return RECEPTION_LEVELS[clampKitIndex(kitIndex)];
+    }
+    public static int passLevel() { return passLevel(kit); }
+    public static int passLevel(int kitIndex) {
+        return PASS_LEVELS[clampKitIndex(kitIndex)];
+    }
+    public static float receptionRating() { return ratingForLevel(receptionLevel()); }
+    public static float passPrecision() { return ratingForLevel(passLevel()); }
+
+    private static int clampKitIndex(int kitIndex) {
+        return Math.max(0, Math.min(kitIndex, CLUBS.length - 1));
+    }
+
+    private static float ratingForLevel(int level) {
+        return 40f + (level - 1) * (60f / 11f);
+    }
     public static void addCoins(int amount) { coins += amount; save(); }
     public static boolean buyOrSelectKit(int index) {
         if (index < 0 || index >= CLUBS.length) return false;
