@@ -82,6 +82,8 @@ public class GameScreen extends ScreenAdapter {
     private final Texture fogTexture;
     private final Texture stadiumBackground;
     private final Texture platformTexture;
+    private final Texture stationaryBallTexture;
+    private final Texture[] flightBallTextures = new Texture[4];
     private final Texture[] playerSprites = new Texture[PLAYER_SPRITE_FILES.length];
     private final Texture[][] kickSprites = new Texture[2][11];
     private final Texture[][] bocaRiverKickSprites = new Texture[2][2];
@@ -148,7 +150,7 @@ public class GameScreen extends ScreenAdapter {
     // COLISIONES
     // ============================================================
 
-    private static final float BALL_RADIUS = 7.2f;
+    private static final float BALL_RADIUS = 6f;
 
     // Ventana breve después de patear durante la cual la pelota
     // no choca contra la plataforma del propio pasador (si no,
@@ -183,6 +185,12 @@ public class GameScreen extends ScreenAdapter {
         batch = new SpriteBatch();
         font = new BitmapFont();
         fogTexture = new Texture(Gdx.files.internal("sprites/weather/fog.png"));
+        stationaryBallTexture = new Texture(Gdx.files.internal("sprites/ball/stationary.png"));
+        stationaryBallTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        for (int i = 0; i < flightBallTextures.length; i++) {
+            flightBallTextures[i] = new Texture(Gdx.files.internal("sprites/ball/flight-" + (i + 1) + ".png"));
+            flightBallTextures[i].setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        }
         int stadiumIndex = MathUtils.clamp(GameProfile.stadium(), 0, STADIUM_BACKGROUND_FILES.length - 1);
         stadiumBackground = new Texture(Gdx.files.internal(STADIUM_BACKGROUND_FILES[stadiumIndex]));
         platformTexture = new Texture(Gdx.files.internal("sprites/platforms/game-platform.png"));
@@ -1037,25 +1045,14 @@ public class GameScreen extends ScreenAdapter {
 
     private void drawBall() {
 
-        shapes.begin(ShapeRenderer.ShapeType.Filled);
-        shapes.setColor(1, 1, 1, 1);
-        shapes.circle(ball.position.x, ball.position.y, BALL_RADIUS);
-        shapes.end();
-
-        if (ball.flying) {
-            shapes.begin(ShapeRenderer.ShapeType.Line);
-            shapes.setColor(0.05f, 0.05f, 0.05f, 1);
-            float angle = animationTime * 640f;
-            for (int i = 0; i < 2; i++) {
-                float a = angle + i * 90f;
-                float x1 = ball.position.x + MathUtils.cosDeg(a) * 7f;
-                float y1 = ball.position.y + MathUtils.sinDeg(a) * 7f;
-                float x2 = ball.position.x + MathUtils.cosDeg(a + 180f) * 7f;
-                float y2 = ball.position.y + MathUtils.sinDeg(a + 180f) * 7f;
-                shapes.line(x1, y1, x2, y2);
-            }
-            shapes.end();
-        }
+        Texture ballTexture = ball.flying
+            ? flightBallTextures[(int) (animationTime * 12f) % flightBallTextures.length]
+            : stationaryBallTexture;
+        float size = ball.flying ? 22f : 16f;
+        batch.begin();
+        batch.setColor(1f, 1f, 1f, 1f);
+        batch.draw(ballTexture, ball.position.x - size / 2f, ball.position.y - size / 2f, size, size);
+        batch.end();
 
         if (currentWeather == WeatherEffect.FOG) {
             float drift = MathUtils.sin(animationTime * 0.22f) * 28f;
@@ -1083,11 +1080,6 @@ public class GameScreen extends ScreenAdapter {
             }
             shapes.end();
         }
-
-        shapes.begin(ShapeRenderer.ShapeType.Line);
-        shapes.setColor(0.05f, 0.05f, 0.05f, 1);
-        shapes.circle(ball.position.x, ball.position.y, BALL_RADIUS);
-        shapes.end();
     }
 
     // ============================================================
@@ -1277,6 +1269,8 @@ public class GameScreen extends ScreenAdapter {
         batch.dispose();
         font.dispose();
         fogTexture.dispose();
+        stationaryBallTexture.dispose();
+        for (Texture flightTexture : flightBallTextures) flightTexture.dispose();
         stadiumBackground.dispose();
         platformTexture.dispose();
         for (Texture playerSprite : playerSprites) playerSprite.dispose();
