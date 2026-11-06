@@ -15,7 +15,7 @@ public final class GameProfile {
     private static final int[] RECEPTION_LEVELS = {11, 12, 9, 8, 10, 6, 8, 4, 3, 7, 5, 2, 1};
     private static final int[] PASS_LEVELS = {12, 11, 9, 10, 7, 5, 8, 6, 4, 7, 2, 3, 1};
     public static final String[] STADIUMS = {"LA BOMBONERA", "EL MONUMENTAL", "CILINDRO", "LIBERTADORES", "NUEVO GASOMETRO"};
-    public static final int[] STADIUM_COSTS = {0, 250, 320, 400, 480};
+    public static final int[] STADIUM_COSTS = {0, 30000, 23000, 28000, 20000};
     private static final Preferences DATA = Gdx.app.getPreferences("pass-like-roman-profile");
     private static int coins = DATA.getInteger("coins", 0);
     private static int kit = DATA.getInteger("kit", CLUBS.length - 1);

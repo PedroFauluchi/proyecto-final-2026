@@ -7,11 +7,13 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.passlikeroman.data.GameProfile;
 import com.passlikeroman.PassLikeRoman;
+import com.passlikeroman.util.PixelFonts;
 
 public class MenuScreen extends ScreenAdapter {
 
@@ -21,42 +23,45 @@ public class MenuScreen extends ScreenAdapter {
     private final SpriteBatch batch;
     private final BitmapFont font;
     private final Texture menuBackground;
-    private final Texture[] stadiumPreviews = new Texture[GameProfile.STADIUMS.length];
-    private static final String[] KIT_PREVIEW_FILES = {
-        "players/boca.png", "players/river.png", "players/racing.png",
-        "players/independiente.png", "players/san-lorenzo.png",
-        "players/rosario-central.png", "players/estudiantes.png", "players/newells.png",
-        "players/argentinos-juniors.png", "players/velez.png", "players/huracan.png",
-        "players/gimnasia.png", "players/neutro.png"
-    };
-    private final Texture[] kitPreviews = new Texture[KIT_PREVIEW_FILES.length];
+    private final Texture menuArtwork;
+    private final Texture stadiumShopArtwork;
+    private final Texture shirtsShopArtwork;
+    private final Texture coinSign;
+    private final Texture playButton;
+    private final Texture shirtsButton;
+    private final Texture stadiumsButton;
+    private final Texture[] stadiumCards = new Texture[GameProfile.STADIUMS.length];
+    private final Texture[] kitCards = new Texture[GameProfile.CLUBS.length];
     private final Music menuMusic;
     private float transition = 0.35f;
     private boolean startingGame = false;
     private int section = 0;
-    private String notice = "Elegí un artículo";
+    private int stadiumScrollIndex = 0;
+    private int kitScrollIndex = 0;
 
     public MenuScreen(PassLikeRoman game) {
         this.game = game;
         camera = new OrthographicCamera();
         shapes = new ShapeRenderer();
         batch = new SpriteBatch();
-        font = new BitmapFont();
+        font = PixelFonts.create();
         menuBackground = new Texture(Gdx.files.internal("menu-background.png"));
-        String[] stadiumFiles = {
-            "stadiums/bombonera.png",
-            "stadiums/monumental.png",
-            "stadiums/cilindro.png",
-            "stadiums/libertadores.png",
-            "stadiums/nuevo-gasometro.png"
-        };
-        for (int i = 0; i < stadiumFiles.length; i++) {
-            stadiumPreviews[i] = new Texture(Gdx.files.internal(stadiumFiles[i]));
+        menuArtwork = new Texture(Gdx.files.internal("menu-screen.png"));
+        stadiumShopArtwork = new Texture(Gdx.files.internal("menu-elements/stadium-shop-background.png"));
+        shirtsShopArtwork = new Texture(Gdx.files.internal("menu-elements/shirts-shop-background.png"));
+        coinSign = new Texture(Gdx.files.internal("menu-elements/coin-sign.png"));
+        playButton = new Texture(Gdx.files.internal("menu-elements/button-play.png"));
+        shirtsButton = new Texture(Gdx.files.internal("menu-elements/button-shirts.png"));
+        stadiumsButton = new Texture(Gdx.files.internal("menu-elements/button-stadiums.png"));
+        for (int i = 0; i < stadiumCards.length; i++) {
+            stadiumCards[i] = new Texture(Gdx.files.internal("stadium-cards/stadium-" + i + ".png"));
+            stadiumCards[i].setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         }
-        for (int i = 0; i < KIT_PREVIEW_FILES.length; i++) {
-            kitPreviews[i] = new Texture(Gdx.files.internal(KIT_PREVIEW_FILES[i]));
+        for (int i = 0; i < kitCards.length; i++) {
+            kitCards[i] = new Texture(Gdx.files.internal("kit-cards/kit-" + i + ".png"));
+            kitCards[i].setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         }
-        menuMusic = Gdx.audio.newMusic(Gdx.files.internal("menu-theme.wav"));
+        menuMusic = Gdx.audio.newMusic(Gdx.files.internal("music/menu.mp3"));
         menuMusic.setLooping(true);
         menuMusic.setVolume(0.22f);
         menuMusic.play();
@@ -65,26 +70,53 @@ public class MenuScreen extends ScreenAdapter {
             @Override
             public boolean touchDown(int screenX, int screenY, int pointer, int button) {
                 float x = screenX * 900f / Gdx.graphics.getWidth();
-                float y = 520f - screenY * 520f / Gdx.graphics.getHeight();
+                float viewHeight = section == 0 ? 506.25f : 520f;
+                float y = viewHeight - screenY * viewHeight / Gdx.graphics.getHeight();
 
                 if (startingGame) return true;
                 if (section == 0) {
-                    if (x > 330 && x < 570 && y > 365 && y < 415) startingGame = true;
-                    else if (x > 375 && x < 525 && y > 305 && y < 350) section = 1;
-                    else if (x > 375 && x < 525 && y > 250 && y < 295) section = 2;
-                    else if (x < 95 && y < 65) Gdx.app.exit();
-                } else if (section == 1 && x > 205 && x < 695 && y > 88 && y < 440) {
-                    int column = x < 450 ? 0 : 1;
-                    int row = Math.min(6, Math.max(0, Math.round((400f - y) / 45f)));
-                    int index = row * 2 + column;
-                    boolean changed = GameProfile.buyOrSelectKit(index);
-                    notice = changed ? "Seleccionado" : "No alcanza el saldo";
-                } else if (section == 2 && x > 205 && x < 695 && y > 105 && y < 398) {
-                    int column = x < 450 ? 0 : 1;
-                    int row = Math.min(2, Math.max(0, Math.round((350f - y) / 105f)));
-                    int index = row * 2 + column;
-                    boolean changed = GameProfile.buyOrSelectStadium(index);
-                    notice = changed ? "Seleccionado" : "No alcanza el saldo";
+                    if (x > 295 && x < 605 && y > 242 && y < 316) startingGame = true;
+                    else if (x > 295 && x < 605 && y > 157 && y < 230) section = 1;
+                    else if (x > 295 && x < 605 && y > 70 && y < 148) section = 2;
+                    else if (x < 112 && y < 145) Gdx.app.exit();
+                } else if (section == 1) {
+                    if (x < 112 && y < 145) {
+                        section = 0;
+                    } else if (y > 205 && y < 320 && x < 130) {
+                        kitScrollIndex = Math.max(0, kitScrollIndex - 1);
+                    } else if (y > 205 && y < 320 && x > 785) {
+                        kitScrollIndex = Math.min(kitCards.length - 5, kitScrollIndex + 1);
+                    } else if (y > 145 && y < 390) {
+                        for (int slot = 0; slot < 5; slot++) {
+                            float cardX = 130f + slot * 130f;
+                            if (x >= cardX && x <= cardX + 122f) {
+                                int index = kitScrollIndex + slot;
+                                if (index < kitCards.length) {
+                                    GameProfile.buyOrSelectKit(index);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                } else if (section == 2) {
+                    if (x < 112 && y < 145) {
+                        section = 0;
+                    } else if (y > 205 && y < 300 && x < 100) {
+                        stadiumScrollIndex = Math.max(0, stadiumScrollIndex - 1);
+                    } else if (y > 205 && y < 300 && x > 800) {
+                        stadiumScrollIndex = Math.min(stadiumCards.length - 3, stadiumScrollIndex + 1);
+                    } else if (y > 130 && y < 380) {
+                        for (int slot = 0; slot < 3; slot++) {
+                            float cardX = 136f + slot * 219f;
+                            if (x >= cardX && x <= cardX + 180f) {
+                                int index = stadiumScrollIndex + slot;
+                                if (index < stadiumCards.length) {
+                                    GameProfile.buyOrSelectStadium(index);
+                                }
+                                break;
+                            }
+                        }
+                    }
                 } else if (y < 145) {
                     section = 0;
                 }
@@ -107,17 +139,21 @@ public class MenuScreen extends ScreenAdapter {
         Gdx.gl.glClearColor(0.035f, 0.055f, 0.09f, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        camera.setToOrtho(false, 900, 520);
+        camera.setToOrtho(false, 900, section == 0 ? 506.25f : 520f);
         camera.update();
         shapes.setProjectionMatrix(camera.combined);
         batch.setProjectionMatrix(camera.combined);
 
-        drawSimpleBackground();
-        if (section == 0) drawMenuPanel(); else drawCollectionPanel();
+        if (section == 0) drawMenuPanel();
+        else if (section == 1) drawKitShop();
+        else if (section == 2) drawStadiumShop();
+        else {
+            drawSimpleBackground();
+        }
         if (transition > 0f) {
             shapes.begin(ShapeRenderer.ShapeType.Filled);
             shapes.setColor(0.01f, 0.02f, 0.04f, transition);
-            shapes.rect(0, 0, 900, 520);
+            shapes.rect(0, 0, 900, section == 0 ? 506.25f : 520f);
             shapes.end();
         }
     }
@@ -137,24 +173,132 @@ public class MenuScreen extends ScreenAdapter {
     }
 
     private void drawMenuPanel() {
+        batch.begin();
+        batch.setColor(1f, 1f, 1f, 1f);
+        batch.draw(menuArtwork, 0, 0, 900, 506.25f);
+        drawMenuElement(coinSign, 34f, 26f);
+        drawMenuElement(playButton, 475f, 309f);
+        drawMenuElement(shirtsButton, 475f, 448f);
+        drawMenuElement(stadiumsButton, 475f, 584f);
+        batch.end();
+
+        drawCoinsAmount(menuArtwork, 506.25f);
+    }
+
+    private void drawCoinsAmount(Texture artwork, float viewHeight) {
+        float scaleX = 900f / artwork.getWidth();
+        float scaleY = viewHeight / artwork.getHeight();
+        float amountX = 145f * scaleX;
+        float amountY = (artwork.getHeight() - 127f) * scaleY;
+        float amountWidth = 137f * scaleX;
+        float amountHeight = 37f * scaleY;
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-        drawPixelButton(330, 365, 240, 50);
-        drawPixelButton(375, 305, 150, 45);
-        drawPixelButton(375, 250, 150, 45);
-        drawPixelButton(18, 15, 77, 32);
-        drawPixelButton(18, 474, 150, 30);
+        shapes.setColor(0.59f, 0.17f, 0.16f, 1f);
+        shapes.rect(amountX, amountY, amountWidth, amountHeight);
+        shapes.end();
+
+        String coinsText = Integer.toString(GameProfile.coins());
+        font.getData().setScale(1f);
+        GlyphLayout layout = new GlyphLayout(font, coinsText);
+        float textScale = Math.min(1.1f, amountWidth / (layout.width + 8f));
+        font.getData().setScale(textScale);
+        layout.setText(font, coinsText);
+        float textX = amountX + (amountWidth - layout.width) / 2f;
+        float textY = amountY + (amountHeight + layout.height) / 2f - 2f;
+        batch.begin();
+        font.setColor(0.10f, 0.025f, 0.025f, 1f);
+        font.draw(batch, coinsText, textX + 1f, textY - 2f);
+        font.setColor(1f, 0.78f, 0.05f, 1f);
+        font.draw(batch, coinsText, textX, textY);
+        batch.end();
+        font.getData().setScale(0.55f);
+    }
+
+    private void drawMenuElement(Texture texture, float sourceX, float sourceY) {
+        float scaleX = 900f / menuArtwork.getWidth();
+        float scaleY = 506.25f / menuArtwork.getHeight();
+        float x = sourceX * scaleX;
+        float y = (menuArtwork.getHeight() - sourceY - texture.getHeight()) * scaleY;
+        batch.draw(texture, x, y, texture.getWidth() * scaleX, texture.getHeight() * scaleY);
+    }
+
+    private void drawStadiumShop() {
+        batch.begin();
+        batch.setColor(1f, 1f, 1f, 1f);
+        batch.draw(stadiumShopArtwork, 0f, 0f, 900f, 520f);
+        batch.end();
+
+        drawCoinsAmount(stadiumShopArtwork, 520f);
+
+        float[] cardX = {136f, 355f, 574f};
+        float cardWidth = 180f;
+        float cardY = 135f;
+        batch.begin();
+        batch.setColor(1f, 1f, 1f, 1f);
+        for (int slot = 0; slot < 3; slot++) {
+            Texture card = stadiumCards[stadiumScrollIndex + slot];
+            float cardHeight = cardWidth * card.getHeight() / card.getWidth();
+            batch.draw(card, cardX[slot], cardY, cardWidth, cardHeight);
+        }
+        batch.end();
+
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(0.025f, 0.08f, 0.17f, 1f);
+        for (int slot = 0; slot < 3; slot++) {
+            shapes.rect(cardX[slot] + 12f, cardY + 10f, cardWidth - 42f, 22f);
+        }
         shapes.end();
 
         batch.begin();
-        font.getData().setScale(0.82f);
-        drawButtonLabel("COMENZAR PARTIDO", 365, 395);
-        font.getData().setScale(0.72f);
-        drawButtonLabel("CAMISETAS", 401, 332);
-        drawButtonLabel("ESTADIOS", 408, 277);
-        font.getData().setScale(0.62f);
-        drawButtonLabel("Salir", 39, 36);
-        font.setColor(1f, 1f, 1f, 1f);
-        font.draw(batch, "Coins: " + GameProfile.coins(), 28, 494);
+        font.getData().setScale(0.48f);
+        font.setColor(1f, 0.82f, 0.18f, 1f);
+        for (int slot = 0; slot < 3; slot++) {
+            int index = stadiumScrollIndex + slot;
+            String status = index == GameProfile.stadium()
+                ? "SELECCIONADO"
+                : GameProfile.isStadiumOwned(index)
+                    ? "COMPRADO" : GameProfile.STADIUM_COSTS[index] + " COINS";
+            font.draw(batch, status, cardX[slot] + 18f, cardY + 26f);
+        }
+        font.getData().setScale(0.55f);
+        batch.end();
+    }
+
+    private void drawKitShop() {
+        batch.begin();
+        batch.setColor(1f, 1f, 1f, 1f);
+        batch.draw(shirtsShopArtwork, 0f, 0f, 900f, 520f);
+        batch.end();
+
+        drawCoinsAmount(shirtsShopArtwork, 520f);
+
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(0.025f, 0.08f, 0.17f, 1f);
+        for (int slot = 0; slot < 5; slot++) {
+            shapes.rect(140f + slot * 130f, 145f, 104f, 22f);
+        }
+        shapes.end();
+
+        batch.begin();
+        font.getData().setScale(0.48f);
+        for (int slot = 0; slot < 5; slot++) {
+            int index = kitScrollIndex + slot;
+            Texture card = kitCards[index];
+            float x = 132f + slot * 130f;
+            float cardWidth = 120f;
+            float cardHeight = cardWidth * card.getHeight() / card.getWidth();
+            batch.setColor(1f, 1f, 1f, 1f);
+            batch.draw(card, x, 177f, cardWidth, cardHeight);
+
+            boolean selected = index == GameProfile.kit();
+            boolean owned = GameProfile.isKitOwned(index);
+            String status = selected ? "SELECCIONADA"
+                : owned ? "COMPRADA" : GameProfile.COSTS[index] + " COINS";
+            GlyphLayout statusLayout = new GlyphLayout(font, status);
+            font.setColor(selected ? 0.48f : 1f, selected ? 1f : 0.83f, 0.20f, 1f);
+            font.draw(batch, status, x + (120f - statusLayout.width) / 2f, 162f);
+        }
+        font.getData().setScale(0.55f);
         batch.end();
     }
 
@@ -189,80 +333,6 @@ public class MenuScreen extends ScreenAdapter {
         font.draw(batch, text, x, y);
     }
 
-    private void drawCollectionPanel() {
-        shapes.begin(ShapeRenderer.ShapeType.Filled);
-        shapes.setColor(0.02f, 0.02f, 0.02f, 0.94f);
-        shapes.rect(175, 68, 550, 390);
-        shapes.setColor(1f, 1f, 1f, 0.96f);
-        shapes.rect(178, 71, 544, 384);
-        drawPixelButton(25, 15, 88, 32);
-        if (section == 1) {
-            for (int i = 0; i < GameProfile.CLUBS.length; i++) {
-                float x = 195 + (i % 2) * 255f;
-                float y = 400 - (i / 2) * 45f;
-                drawStoreCard(x, y - 12, 245, 44);
-            }
-        } else {
-            for (int i = 0; i < GameProfile.STADIUMS.length; i++) {
-                float x = 195 + (i % 2) * 255f;
-                float y = 350 - (i / 2) * 105f;
-                drawStoreCard(x, y - 38, 245, 92);
-            }
-        }
-        shapes.end();
-
-        batch.begin();
-        font.setColor(0.03f, 0.03f, 0.03f, 1f);
-        font.getData().setScale(1.05f);
-        font.draw(batch, section == 1 ? "CAMISETAS" : "ESTADIOS", 370, 435);
-        font.getData().setScale(0.48f);
-
-        if (section == 1) {
-            for (int i = 0; i < GameProfile.CLUBS.length; i++) {
-                int column = i % 2;
-                int row = i / 2;
-                float x = 195 + column * 255f;
-                float y = 400 - row * 45f;
-                batch.setColor(1f, 1f, 1f, 1f);
-                batch.draw(kitPreviews[i], x + 5, y - 10, 25, 40);
-                boolean owned = GameProfile.isKitOwned(i);
-                boolean selected = i == GameProfile.kit();
-                String state = "REC " + GameProfile.receptionLevel(i) + "  PASE " + GameProfile.passLevel(i)
-                    + "  |  " + (selected ? "EQUIPADO" : owned ? "EQUIPAR" : GameProfile.COSTS[i] + " coins");
-                font.draw(batch, GameProfile.CLUBS[i], x + 35, y + 20);
-                font.draw(batch, state, x + 35, y + 7);
-            }
-        } else {
-            for (int i = 0; i < GameProfile.STADIUMS.length; i++) {
-                int column = i % 2;
-                int row = i / 2;
-                float x = 195 + column * 255f;
-                float y = 350 - row * 105f;
-                batch.setColor(1f, 1f, 1f, 1f);
-                batch.draw(stadiumPreviews[i], x + 5, y - 30, 92, 68);
-                boolean owned = GameProfile.isStadiumOwned(i);
-                boolean selected = i == GameProfile.stadium();
-                String state = selected ? "EQUIPADO" : owned ? "EQUIPAR" : GameProfile.STADIUM_COSTS[i] + " coins";
-                font.draw(batch, GameProfile.STADIUMS[i], x + 102, y + 8);
-                font.draw(batch, state, x + 102, y - 8);
-            }
-        }
-
-        font.getData().setScale(0.55f);
-        font.draw(batch, "Coins: " + GameProfile.coins(), 195, 88);
-        font.draw(batch, notice + "   |   Volver", 420, 88);
-        font.getData().setScale(0.62f);
-        font.draw(batch, "Volver", 48, 36);
-        batch.end();
-    }
-
-    private void drawStoreCard(float x, float y, float width, float height) {
-        shapes.setColor(0.04f, 0.04f, 0.04f, 0.9f);
-        shapes.rect(x, y, width, height);
-        shapes.setColor(1f, 1f, 1f, 0.98f);
-        shapes.rect(x + 1f, y + 1f, width - 2f, height - 2f);
-    }
-
     @Override
     public void hide() {
         menuMusic.stop();
@@ -275,7 +345,14 @@ public class MenuScreen extends ScreenAdapter {
         font.dispose();
         menuMusic.dispose();
         menuBackground.dispose();
-        for (Texture preview : stadiumPreviews) preview.dispose();
-        for (Texture preview : kitPreviews) preview.dispose();
+        menuArtwork.dispose();
+        stadiumShopArtwork.dispose();
+        shirtsShopArtwork.dispose();
+        coinSign.dispose();
+        playButton.dispose();
+        shirtsButton.dispose();
+        stadiumsButton.dispose();
+        for (Texture card : stadiumCards) card.dispose();
+        for (Texture card : kitCards) card.dispose();
     }
 }

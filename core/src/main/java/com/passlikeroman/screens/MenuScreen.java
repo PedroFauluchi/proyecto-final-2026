@@ -21,6 +21,7 @@ public class MenuScreen extends ScreenAdapter {
     private final SpriteBatch batch;
     private final BitmapFont font;
     private final Texture menuBackground;
+    private final Texture menuArtwork;
     private final Texture[] stadiumPreviews = new Texture[GameProfile.STADIUMS.length];
     private static final String[] KIT_PREVIEW_FILES = {
         "players/boca.png", "players/river.png", "players/racing.png",
@@ -43,6 +44,7 @@ public class MenuScreen extends ScreenAdapter {
         batch = new SpriteBatch();
         font = new BitmapFont();
         menuBackground = new Texture(Gdx.files.internal("menu-background.png"));
+        menuArtwork = new Texture(Gdx.files.internal("menu-screen.png"));
         String[] stadiumFiles = {
             "stadiums/bombonera.png",
             "stadiums/monumental.png",
@@ -65,14 +67,15 @@ public class MenuScreen extends ScreenAdapter {
             @Override
             public boolean touchDown(int screenX, int screenY, int pointer, int button) {
                 float x = screenX * 900f / Gdx.graphics.getWidth();
-                float y = 520f - screenY * 520f / Gdx.graphics.getHeight();
+                float viewHeight = section == 0 ? 506.25f : 520f;
+                float y = viewHeight - screenY * viewHeight / Gdx.graphics.getHeight();
 
                 if (startingGame) return true;
                 if (section == 0) {
-                    if (x > 330 && x < 570 && y > 365 && y < 415) startingGame = true;
-                    else if (x > 375 && x < 525 && y > 305 && y < 350) section = 1;
-                    else if (x > 375 && x < 525 && y > 250 && y < 295) section = 2;
-                    else if (x < 95 && y < 65) Gdx.app.exit();
+                    if (x > 295 && x < 605 && y > 242 && y < 316) startingGame = true;
+                    else if (x > 295 && x < 605 && y > 157 && y < 230) section = 1;
+                    else if (x > 295 && x < 605 && y > 70 && y < 148) section = 2;
+                    else if (x < 112 && y < 145) Gdx.app.exit();
                 } else if (section == 1 && x > 205 && x < 695 && y > 88 && y < 440) {
                     int column = x < 450 ? 0 : 1;
                     int row = Math.min(6, Math.max(0, Math.round((400f - y) / 45f)));
@@ -107,17 +110,20 @@ public class MenuScreen extends ScreenAdapter {
         Gdx.gl.glClearColor(0.035f, 0.055f, 0.09f, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        camera.setToOrtho(false, 900, 520);
+        camera.setToOrtho(false, 900, section == 0 ? 506.25f : 520f);
         camera.update();
         shapes.setProjectionMatrix(camera.combined);
         batch.setProjectionMatrix(camera.combined);
 
-        drawSimpleBackground();
-        if (section == 0) drawMenuPanel(); else drawCollectionPanel();
+        if (section == 0) drawMenuPanel();
+        else {
+            drawSimpleBackground();
+            drawCollectionPanel();
+        }
         if (transition > 0f) {
             shapes.begin(ShapeRenderer.ShapeType.Filled);
             shapes.setColor(0.01f, 0.02f, 0.04f, transition);
-            shapes.rect(0, 0, 900, 520);
+            shapes.rect(0, 0, 900, section == 0 ? 506.25f : 520f);
             shapes.end();
         }
     }
@@ -137,24 +143,9 @@ public class MenuScreen extends ScreenAdapter {
     }
 
     private void drawMenuPanel() {
-        shapes.begin(ShapeRenderer.ShapeType.Filled);
-        drawPixelButton(330, 365, 240, 50);
-        drawPixelButton(375, 305, 150, 45);
-        drawPixelButton(375, 250, 150, 45);
-        drawPixelButton(18, 15, 77, 32);
-        drawPixelButton(18, 474, 150, 30);
-        shapes.end();
-
         batch.begin();
-        font.getData().setScale(0.82f);
-        drawButtonLabel("COMENZAR PARTIDO", 365, 395);
-        font.getData().setScale(0.72f);
-        drawButtonLabel("CAMISETAS", 401, 332);
-        drawButtonLabel("ESTADIOS", 408, 277);
-        font.getData().setScale(0.62f);
-        drawButtonLabel("Salir", 39, 36);
-        font.setColor(1f, 1f, 1f, 1f);
-        font.draw(batch, "Coins: " + GameProfile.coins(), 28, 494);
+        batch.setColor(1f, 1f, 1f, 1f);
+        batch.draw(menuArtwork, 0, 0, 900, 506.25f);
         batch.end();
     }
 
@@ -275,6 +266,7 @@ public class MenuScreen extends ScreenAdapter {
         font.dispose();
         menuMusic.dispose();
         menuBackground.dispose();
+        menuArtwork.dispose();
         for (Texture preview : stadiumPreviews) preview.dispose();
         for (Texture preview : kitPreviews) preview.dispose();
     }

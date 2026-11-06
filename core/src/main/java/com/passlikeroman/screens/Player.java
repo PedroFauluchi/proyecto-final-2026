@@ -31,6 +31,11 @@ public class Player {
     private float kickTimer = 0f;
     private float receiveTimer = 0f;
     private ReceiveType receiveType = ReceiveType.NONE;
+    private float goalkeeperJumpTime = 0f;
+    private static final float GOALKEEPER_JUMP_PERIOD = 1.8f;
+    private static final float GOALKEEPER_JUMP_START = 0.9f;
+    private static final float GOALKEEPER_JUMP_DURATION = 0.7f;
+    private static final float GOALKEEPER_JUMP_HEIGHT = 34f;
 
     public Player(String name, int number, float x, float y,
                   float efecto, float precision, float potencia, float recepcion) {
@@ -78,6 +83,17 @@ public class Player {
                 receiveType = ReceiveType.NONE;
             }
         }
+    }
+
+    public void updateGoalkeeperJump(float delta) {
+        goalkeeperJumpTime = (goalkeeperJumpTime + delta) % GOALKEEPER_JUMP_PERIOD;
+    }
+
+    public float getGoalkeeperJumpOffset() {
+        float jumpTime = goalkeeperJumpTime - GOALKEEPER_JUMP_START;
+        if (jumpTime < 0f || jumpTime > GOALKEEPER_JUMP_DURATION) return 0f;
+        float progress = jumpTime / GOALKEEPER_JUMP_DURATION;
+        return 4f * GOALKEEPER_JUMP_HEIGHT * progress * (1f - progress);
     }
 
     public boolean isKicking() {

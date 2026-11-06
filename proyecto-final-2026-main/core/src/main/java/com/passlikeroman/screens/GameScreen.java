@@ -4,16 +4,19 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.ScreenAdapter;
+import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.passlikeroman.PassLikeRoman;
 import com.passlikeroman.data.GameProfile;
+import com.passlikeroman.util.PixelFonts;
 
 public class GameScreen extends ScreenAdapter {
 
@@ -50,6 +53,7 @@ public class GameScreen extends ScreenAdapter {
     private static final int[] KICK_SPRITE_BY_KIT = {4, -1, 8, 9, 7, 4, 6, 3, 1, 2, 0, 5, 10};
     private static final int BOCA_KIT = 0;
     private static final int RIVER_KIT = 1;
+    private static final int NEUTRAL_KIT = 12;
 
     // ============================================================
     // SLOTS FIJOS DE PANTALLA
@@ -79,9 +83,15 @@ public class GameScreen extends ScreenAdapter {
     private final ShapeRenderer shapes;
     private final SpriteBatch batch;
     private final BitmapFont font;
-    private final Texture fogTexture;
+    private final Texture[] fogCloudTextures = new Texture[8];
     private final Texture stadiumBackground;
+    private final Texture gameOverArtwork;
+    private final Music gameplayMusic;
+    private final Music gameOverMusic;
     private final Texture platformTexture;
+    private final Texture[] obstacleSprites = new Texture[Obstacle.Type.values().length];
+    private final Texture goalkeeperJumpSprite;
+    private final Texture[] stormCloudTextures = new Texture[8];
     private final Texture stationaryBallTexture;
     private final Texture[] flightBallTextures = new Texture[4];
     private final Texture[] playerSprites = new Texture[PLAYER_SPRITE_FILES.length];
@@ -111,6 +121,7 @@ public class GameScreen extends ScreenAdapter {
 
     private boolean dragging = false;
     private boolean gameOver = false;
+    private boolean obstacleBounceStarted = false;
     private boolean scrolling = false;
     private boolean scrollAfterReceive = false;
 
@@ -131,8 +142,6 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private WeatherEffect currentWeather = WeatherEffect.NONE;
-
-    private float lightningTimer = 0f;
 
     // Viento: positivo empuja la pelota a la derecha,
     // negativo la empuja a la izquierda.
@@ -183,8 +192,12 @@ public class GameScreen extends ScreenAdapter {
         camera = new OrthographicCamera();
         shapes = new ShapeRenderer();
         batch = new SpriteBatch();
-        font = new BitmapFont();
-        fogTexture = new Texture(Gdx.files.internal("sprites/weather/fog.png"));
+        font = PixelFonts.create();
+        for (int i = 0; i < fogCloudTextures.length; i++) {
+            fogCloudTextures[i] = new Texture(
+                Gdx.files.internal("sprites/weather/fog-clouds/fog-cloud-" + (i + 1) + ".png"));
+            fogCloudTextures[i].setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        }
         stationaryBallTexture = new Texture(Gdx.files.internal("sprites/ball/stationary.png"));
         stationaryBallTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         for (int i = 0; i < flightBallTextures.length; i++) {
@@ -193,7 +206,33 @@ public class GameScreen extends ScreenAdapter {
         }
         int stadiumIndex = MathUtils.clamp(GameProfile.stadium(), 0, STADIUM_BACKGROUND_FILES.length - 1);
         stadiumBackground = new Texture(Gdx.files.internal(STADIUM_BACKGROUND_FILES[stadiumIndex]));
+        gameOverArtwork = new Texture(Gdx.files.internal("menu-elements/game-over.png"));
+        gameplayMusic = Gdx.audio.newMusic(Gdx.files.internal("music/gameplay.mp3"));
+        gameplayMusic.setLooping(true);
+        gameplayMusic.setVolume(0.28f);
+        gameOverMusic = Gdx.audio.newMusic(Gdx.files.internal("music/game-over.mp3"));
+        gameOverMusic.setLooping(true);
+        gameOverMusic.setVolume(0.38f);
+        gameplayMusic.play();
         platformTexture = new Texture(Gdx.files.internal("sprites/platforms/game-platform.png"));
+        String[] obstacleSpriteFiles = {
+            "obstacles/mannequin.png",
+            "obstacles/goalkeeper_idle.png",
+            "obstacles/interceptor.png",
+            "obstacles/cones.png",
+            "obstacles/tires.png",
+            "obstacles/wind_gust.png",
+            "obstacles/cardboard.png"
+        };
+        for (int i = 0; i < obstacleSpriteFiles.length; i++) {
+            obstacleSprites[i] = new Texture(Gdx.files.internal(obstacleSpriteFiles[i]));
+        }
+        goalkeeperJumpSprite = new Texture(Gdx.files.internal("obstacles/goalkeeper_jump.png"));
+        for (int i = 0; i < stormCloudTextures.length; i++) {
+            stormCloudTextures[i] = new Texture(
+                Gdx.files.internal("sprites/weather/storm/storm-cloud-" + (i + 1) + ".png"));
+            stormCloudTextures[i].setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        }
         for (int i = 0; i < PLAYER_SPRITE_FILES.length; i++) {
             playerSprites[i] = new Texture(Gdx.files.internal(PLAYER_SPRITE_FILES[i]));
         }
@@ -230,7 +269,11 @@ public class GameScreen extends ScreenAdapter {
                 screenToWorld(screenX, screenY, mouse);
 
                 if (gameOver) {
-                    restart();
+                    if (mouse.x > 455f && mouse.x < 730f && mouse.y > 70f && mouse.y < 170f) {
+                        restart();
+                    } else if (mouse.x > 170f && mouse.x < 445f && mouse.y > 70f && mouse.y < 170f) {
+                        game.setScreen(new MenuScreen(game));
+                    }
                     return true;
                 }
 
@@ -334,6 +377,10 @@ public class GameScreen extends ScreenAdapter {
 
     private void restart() {
 
+        gameOverMusic.stop();
+        gameplayMusic.stop();
+        gameplayMusic.play();
+
         round = 1;
 
         gameOver = false;
@@ -343,7 +390,6 @@ public class GameScreen extends ScreenAdapter {
 
         wind = 0;
         stormMovement = 0;
-        lightningTimer = 0;
 
         platforms[SENDER] = new Platform(SENDER_X, 180, 170, 20);
         platforms[RECEIVER] = new Platform(RECEIVER_X, 230, 170, 20);
@@ -428,6 +474,7 @@ public class GameScreen extends ScreenAdapter {
         launchVelocity.rotate(MathUtils.random(-inaccuracy, inaccuracy));
         launchVelocity.y += players[SENDER].efecto * 1.15f;
         players[SENDER].startKick();
+        obstacleBounceStarted = false;
 
         rainFlightTime = 0f;
         liftoffTimer = LIFTOFF_GRACE;
@@ -462,8 +509,6 @@ public class GameScreen extends ScreenAdapter {
             updateStorm(delta);
         }
 
-        lightningTimer += delta;
-
         if (liftoffTimer > 0) {
             liftoffTimer -= delta;
         }
@@ -494,17 +539,17 @@ public class GameScreen extends ScreenAdapter {
 
             checkBallBounds();
 
-            if (ball.flying && checkReceiver()) {
+            if (ball.flying && !obstacleBounceStarted && checkReceiver()) {
                 successfulPass();
                 return;
             }
 
-            if (ball.flying && checkObstacle()) {
-                lose();
+            if (ball.flying && !obstacleBounceStarted && checkObstacle()) {
+                bounceFromObstacle();
             }
 
-            if (ball.flying && checkPlatformCollision()) {
-                lose();
+            if (ball.flying && !obstacleBounceStarted && checkPlatformCollision()) {
+                bounceFromObstacle();
             }
         }
     }
@@ -531,14 +576,17 @@ public class GameScreen extends ScreenAdapter {
 
     private void checkBallBounds() {
 
-        if (
-            ball.position.x < -80 ||
-                ball.position.x > WORLD_WIDTH + 80 ||
-                ball.position.y < 55 ||
-                ball.position.y > WORLD_HEIGHT + 80
-        ) {
+        if (ball.position.y < 55 || (!obstacleBounceStarted &&
+            (ball.position.x < -80 || ball.position.x > WORLD_WIDTH + 80 ||
+                ball.position.y > WORLD_HEIGHT + 80))) {
             lose();
         }
+    }
+
+    private void bounceFromObstacle() {
+        obstacleBounceStarted = true;
+        ball.velocity.x *= -0.12f;
+        ball.velocity.y = Math.max(200f, Math.abs(ball.velocity.y) * 0.4f);
     }
 
     private boolean checkReceiver() {
@@ -798,16 +846,17 @@ public class GameScreen extends ScreenAdapter {
         // quede sobre esa línea (no la base).
         float obstacleY = MathUtils.clamp(baseY - 35f, 70f, WORLD_HEIGHT - 120f);
 
-        int choice = MathUtils.random(0, 5);
+        int choice = MathUtils.random(0, 6);
 
         Obstacle.Type type;
 
         switch (choice) {
-            case 0: type = Obstacle.Type.GOALKEEPER; break;
-            case 1: type = Obstacle.Type.INTERCEPTOR; break;
-            case 2: type = Obstacle.Type.CONE_WALL; break;
-            case 3: type = Obstacle.Type.TIRES; break;
-            case 4: type = Obstacle.Type.WIND_GUST; break;
+            case 0: type = Obstacle.Type.MANNEQUIN; break;
+            case 1: type = Obstacle.Type.GOALKEEPER; break;
+            case 2: type = Obstacle.Type.INTERCEPTOR; break;
+            case 3: type = Obstacle.Type.CONE_WALL; break;
+            case 4: type = Obstacle.Type.TIRES; break;
+            case 5: type = Obstacle.Type.WIND_GUST; break;
             default: type = Obstacle.Type.CARDBOARD; break;
         }
 
@@ -818,6 +867,9 @@ public class GameScreen extends ScreenAdapter {
     private void lose() {
         ball.flying = false;
         gameOver = true;
+        gameplayMusic.stop();
+        gameOverMusic.stop();
+        gameOverMusic.play();
     }
 
     private void screenToWorld(int screenX, int screenY, Vector2 result) {
@@ -951,10 +1003,6 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private void drawPlayers() {
-        if (!ball.flying && !scrolling && !gameOver) {
-            drawReceptionArc(players[RECEIVER]);
-        }
-
         int kit = MathUtils.clamp(GameProfile.kit(), 0, playerSprites.length - 1);
         float spriteWidth = 31f;
         float spriteHeight = 74f;
@@ -991,9 +1039,8 @@ public class GameScreen extends ScreenAdapter {
                 : 0f;
             boolean clubFacingReversed = kit == 6 || kit == 7 || kit == 10 || kit == 11;
             boolean mirrored = (i == RECEIVER) ^ clubFacingReversed;
-            boolean receptionFrameNeedsFlip = false;
-            boolean flipX = showingReceptionPose
-                ? receptionFrameNeedsFlip
+            boolean flipX = showingReceptionPose && kit == NEUTRAL_KIT
+                ? false
                 : mirrored ^ (showingKickPose && clubFacingReversed);
             float facing = mirrored ? -1f : 1f;
             float kickPulse = player.isKicking()
@@ -1017,32 +1064,6 @@ public class GameScreen extends ScreenAdapter {
         batch.end();
     }
 
-    private void drawReceptionArc(Player p) {
-
-        shapes.begin(ShapeRenderer.ShapeType.Line);
-        shapes.setColor(0.1f, 1f, 0.25f, 0.95f);
-
-        float radius = p.getReceptionRadius();
-        int segments = 32;
-        float startAngle = 15f;
-        float endAngle = 165f;
-
-        for (int i = 0; i < segments; i++) {
-
-            float a1 = MathUtils.lerp(startAngle, endAngle, i / (float) segments);
-            float a2 = MathUtils.lerp(startAngle, endAngle, (i + 1) / (float) segments);
-
-            float x1 = p.x + MathUtils.cosDeg(a1) * radius;
-            float y1 = p.y + 18 + MathUtils.sinDeg(a1) * radius;
-            float x2 = p.x + MathUtils.cosDeg(a2) * radius;
-            float y2 = p.y + 18 + MathUtils.sinDeg(a2) * radius;
-
-            shapes.line(x1, y1, x2, y2);
-        }
-
-        shapes.end();
-    }
-
     private void drawBall() {
 
         Texture ballTexture = ball.flying
@@ -1055,30 +1076,48 @@ public class GameScreen extends ScreenAdapter {
         batch.end();
 
         if (currentWeather == WeatherEffect.FOG) {
-            float drift = MathUtils.sin(animationTime * 0.22f) * 28f;
-            float drift2 = MathUtils.sin(animationTime * 0.17f + 2f) * 22f;
-
             batch.begin();
-            batch.setColor(0.86f, 0.91f, 0.96f, 0.28f);
-            batch.draw(fogTexture, 300f + drift, 250f, 170f, 128f);
-            batch.draw(fogTexture, 374f + drift2, 285f, 175f, 132f);
-            batch.draw(fogTexture, 350f - drift2, 215f, 155f, 116f);
+            batch.setColor(1f, 1f, 1f, 1f);
+            float senderX = players[SENDER].x;
+            float receiverX = players[RECEIVER].x;
+            float senderY = players[SENDER].y;
+            float receiverY = players[RECEIVER].y;
+            float laneStartX = Math.min(senderX, receiverX) - 35f;
+            float laneWidth = Math.abs(receiverX - senderX) + 70f;
+            int cloudCount = fogCloudTextures.length * 2;
+            float[] cloudWidths = {160f, 170f, 105f, 145f, 180f, 155f, 170f, 112f};
+            for (int i = 0; i < cloudCount; i++) {
+                int cloudIndex = i % fogCloudTextures.length;
+                Texture cloud = fogCloudTextures[cloudIndex];
+                float progress = (animationTime * 0.12f + i / (float) cloudCount) % 1f;
+                float phase = animationTime * 0.65f + i * 1.7f;
+                float drawWidth = cloudWidths[cloudIndex];
+                float drawHeight = drawWidth * cloud.getHeight() / cloud.getWidth();
+                float centerX = laneStartX + progress * laneWidth;
+                float centerY = MathUtils.lerp(senderY, receiverY, progress) + 25f
+                    + MathUtils.sin(phase) * 92f;
+                batch.draw(cloud, centerX - drawWidth / 2f, centerY - drawHeight / 2f,
+                    drawWidth, drawHeight);
+            }
             batch.setColor(1f, 1f, 1f, 1f);
             batch.end();
         } else if (currentWeather == WeatherEffect.STORM) {
-            shapes.begin(ShapeRenderer.ShapeType.Filled);
-            shapes.setColor(0.035f, 0.045f, 0.075f, 0.30f);
-            float drift = (animationTime * 25f) % 220f;
-            for (int i = 0; i < 5; i++) {
-                float x = i * 220f - drift;
-                shapes.ellipse(x, 300 + (i % 2) * 20, 190, 46);
+            batch.begin();
+            batch.setColor(1f, 1f, 1f, 1f);
+            float[] cloudWidths = {190f, 190f, 105f, 155f, 185f, 160f, 175f, 112f};
+            for (int i = 0; i < stormCloudTextures.length; i++) {
+                Texture cloud = stormCloudTextures[i];
+                float width = cloudWidths[i];
+                float height = width * cloud.getHeight() / cloud.getWidth();
+                float travelWidth = WORLD_WIDTH + width;
+                float travel = (animationTime * (17f + (i % 3) * 5f) + i * 143f) % travelWidth;
+                float x = travel - width;
+                float y = WORLD_HEIGHT - height * 0.68f - 25f
+                    + MathUtils.sin(animationTime * 0.55f + i * 1.4f) * 5f;
+                batch.draw(cloud, x, y, width, height);
             }
-            float flash = Math.max(0f, 1f - (lightningTimer % 6f) * 5f);
-            if (flash > 0) {
-                shapes.setColor(0.75f, 0.84f, 1f, flash * 0.24f);
-                shapes.rect(0, 70, WORLD_WIDTH, WORLD_HEIGHT - 70);
-            }
-            shapes.end();
+            batch.setColor(1f, 1f, 1f, 1f);
+            batch.end();
         }
     }
 
@@ -1147,57 +1186,41 @@ public class GameScreen extends ScreenAdapter {
 
         if (obstacle == null || !obstacle.active) return;
 
-        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        drawObstaclePlatform();
 
-        switch (obstacle.type) {
-
-            case GOALKEEPER:
-                shapes.setColor(0.95f, 0.75f, 0.08f, 1);
-                shapes.circle(obstacle.x, obstacle.y + 51, 8.5f);
-                shapes.setColor(0.85f, 0.1f, 0.12f, 1);
-                shapes.rect(obstacle.x - 13.6f, obstacle.y + 17, 27.2f, 32.3f);
-                break;
-
-            case INTERCEPTOR:
-                shapes.setColor(0.82f, 0.61f, 0.45f, 1);
-                shapes.circle(obstacle.x, obstacle.y + 55.25f, 8.5f);
-                shapes.setColor(0.95f, 0.2f, 0.15f, 1);
-                shapes.rect(obstacle.x - 12.75f, obstacle.y + 17, 25.5f, 34);
-                break;
-
-            case CONE_WALL:
-                shapes.setColor(1f, 0.48f, 0.05f, 1);
-                for (int i = 0; i < 4; i++) {
-                    shapes.triangle(
-                        obstacle.x - 27.2f + i * 18.7f, obstacle.y,
-                        obstacle.x - 18.7f + i * 18.7f, obstacle.y,
-                        obstacle.x - 22.95f + i * 18.7f, obstacle.y + 23.8f
-                    );
-                }
-                break;
-
-            case TIRES:
-                shapes.setColor(0.04f, 0.04f, 0.04f, 1);
-                for (int i = 0; i < 3; i++) {
-                    shapes.circle(obstacle.x - 18.7f + i * 18.7f, obstacle.y + 15.3f, 15.3f);
-                }
-                break;
-
-            case WIND_GUST:
-                shapes.setColor(0.4f, 0.8f, 1f, 0.35f);
-                shapes.rect(obstacle.x - 21.25f, obstacle.y, 42.5f, 76.5f);
-                break;
-
-            case CARDBOARD:
-                shapes.setColor(0.62f, 0.42f, 0.22f, 1);
-                shapes.rect(obstacle.x - 16.15f, obstacle.y, 32.3f, 46.75f);
-                break;
-        }
-
-        shapes.end();
-
+        boolean goalkeeper = obstacle.type == Obstacle.Type.GOALKEEPER;
+        Texture sprite = goalkeeper && obstacle.isGoalkeeperJumping()
+            ? goalkeeperJumpSprite : obstacleSprites[obstacle.type.ordinal()];
         batch.begin();
+        batch.setColor(1f, 1f, 1f, 1f);
+        if (goalkeeper) {
+            batch.draw(sprite, obstacle.x - obstacle.width / 2f, obstacle.y,
+                obstacle.width, obstacle.height,
+                0, 0, sprite.getWidth(), sprite.getHeight(), true, false);
+        } else {
+            batch.draw(sprite, obstacle.x - obstacle.width / 2f, obstacle.y,
+                obstacle.width, obstacle.height);
+        }
         batch.end();
+    }
+
+    private void drawObstaclePlatform() {
+        float width = obstacle.width + 18f;
+        float x = obstacle.x - width / 2f;
+        float y = obstacle.getPlatformY() - 10f;
+
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(0.025f, 0.035f, 0.055f, 1f);
+        shapes.rect(x - 2f, y, width + 4f, 11f);
+        shapes.setColor(0.34f, 0.20f, 0.12f, 1f);
+        shapes.rect(x, obstacle.getPlatformY() - 9f, width, 8f);
+        shapes.setColor(0.54f, 0.34f, 0.19f, 1f);
+        shapes.rect(x + 3f, obstacle.getPlatformY() - 7f, width - 6f, 3f);
+        shapes.setColor(0.20f, 0.55f, 0.17f, 1f);
+        shapes.rect(x - 1f, obstacle.getPlatformY() - 2f, width + 2f, 3f);
+        shapes.setColor(0.44f, 0.76f, 0.25f, 1f);
+        shapes.rect(x + 3f, obstacle.getPlatformY(), width - 6f, 1.5f);
+        shapes.end();
     }
 
     private void drawHud() {
@@ -1237,25 +1260,27 @@ public class GameScreen extends ScreenAdapter {
 
 
     private void drawGameOver() {
-
-        shapes.begin(ShapeRenderer.ShapeType.Filled);
-        shapes.setColor(0.01f, 0.02f, 0.04f, 0.88f);
-        shapes.rect(190, 150, 520, 230);
-        shapes.end();
-
         batch.begin();
+        batch.setColor(1f, 1f, 1f, 1f);
+        batch.draw(gameOverArtwork, 0f, 0f, WORLD_WIDTH, WORLD_HEIGHT);
 
-        font.getData().setScale(2.2f);
-        font.setColor(1, 0.25f, 0.18f, 1);
-        font.draw(batch, "GAME OVER", 335, 330);
+        font.getData().setScale(1.15f);
+        font.setColor(1f, 0.94f, 0.72f, 1f);
+        String coinsText = Integer.toString(GameProfile.coins());
+        GlyphLayout coinsLayout = new GlyphLayout(font, coinsText);
+        font.draw(batch, coinsText, (WORLD_WIDTH - coinsLayout.width) / 2f, 337f);
 
-        font.getData().setScale(1.0f);
-        font.setColor(1, 1, 1, 1);
-        font.draw(batch, "Coins: " + GameProfile.coins(), 365, 280);
-        font.draw(batch, "Clic o R para volver a jugar", 315, 205);
-        font.draw(batch, "M para volver al menú", 350, 180);
-
+        String passesText = Integer.toString(Math.max(0, round - 1));
+        GlyphLayout passesLayout = new GlyphLayout(font, passesText);
+        font.draw(batch, passesText, (WORLD_WIDTH - passesLayout.width) / 2f, 228f);
+        font.getData().setScale(0.55f);
         batch.end();
+    }
+
+    @Override
+    public void hide() {
+        gameplayMusic.stop();
+        gameOverMusic.stop();
     }
 
     @Override
@@ -1268,11 +1293,17 @@ public class GameScreen extends ScreenAdapter {
         shapes.dispose();
         batch.dispose();
         font.dispose();
-        fogTexture.dispose();
+        for (Texture cloud : fogCloudTextures) cloud.dispose();
         stationaryBallTexture.dispose();
         for (Texture flightTexture : flightBallTextures) flightTexture.dispose();
         stadiumBackground.dispose();
+        gameOverArtwork.dispose();
+        gameplayMusic.dispose();
+        gameOverMusic.dispose();
         platformTexture.dispose();
+        for (Texture sprite : obstacleSprites) sprite.dispose();
+        goalkeeperJumpSprite.dispose();
+        for (Texture cloud : stormCloudTextures) cloud.dispose();
         for (Texture playerSprite : playerSprites) playerSprite.dispose();
         for (Texture[] poses : kickSprites) for (Texture pose : poses) pose.dispose();
         for (Texture[] poses : bocaRiverKickSprites) for (Texture pose : poses) pose.dispose();

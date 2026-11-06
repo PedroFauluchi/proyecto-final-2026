@@ -3,6 +3,7 @@ package com.passlikeroman.screens;
 public class Obstacle {
 
     public enum Type {
+        MANNEQUIN,
         GOALKEEPER,
         INTERCEPTOR,
         CONE_WALL,
@@ -28,36 +29,41 @@ public class Obstacle {
         this.originY = y;
 
         switch (type) {
+            case MANNEQUIN:
+                width = 34f;
+                height = 78f;
+                break;
             case GOALKEEPER:
-                width = 27.2f;
-                height = 51;
+                width = 40f;
+                height = 90f;
                 break;
             case INTERCEPTOR:
-                width = 25.5f;
-                height = 51;
+                width = 34f;
+                height = 78f;
                 speed = 95;
                 break;
             case CONE_WALL:
-                width = 59.5f;
-                height = 23.8f;
+                width = 74f;
+                height = 44f;
                 break;
             case TIRES:
-                width = 52.7f;
-                height = 35.7f;
+                width = 74f;
+                height = 31f;
                 break;
             case WIND_GUST:
-                width = 42.5f;
-                height = 76.5f;
+                width = 52f;
+                height = 48f;
                 break;
             default:
-                width = 32.3f;
-                height = 46.75f;
+                width = 56f;
+                height = 52f;
                 break;
         }
     }
 
     public int reward() {
         switch (type) {
+            case MANNEQUIN: return 60;
             case GOALKEEPER: return 60;
             case INTERCEPTOR: return 90;
             case CONE_WALL: return 15;
@@ -70,8 +76,28 @@ public class Obstacle {
 
     public void update(float delta) {
         phase += delta * (1.5f + speed * 0.01f);
-        if (type == Type.INTERCEPTOR) {
+        if (type == Type.GOALKEEPER) {
+            float jumpPhase = phase % 2.2f;
+            float jumpTime = jumpPhase - 0.8f;
+            float jumpOffset = 0f;
+            if (jumpTime >= 0f && jumpTime <= 0.8f) {
+                float progress = jumpTime / 0.8f;
+                jumpOffset = 4f * 42f * progress * (1f - progress);
+            }
+            y = originY + jumpOffset;
+        } else if (type == Type.INTERCEPTOR) {
             y = Math.max(150, Math.min(360, originY + (float) Math.sin(phase) * Math.min(46f, speed * 0.38f)));
         }
+    }
+
+    public float getPlatformY() {
+        // The goalkeeper jumps above a fixed platform; vertically moving
+        // obstacles carry their platform with them.
+        return type == Type.GOALKEEPER ? originY : y;
+    }
+
+    public boolean isGoalkeeperJumping() {
+        float jumpPhase = phase % 2.2f;
+        return jumpPhase >= 0.8f && jumpPhase <= 1.6f;
     }
 }
